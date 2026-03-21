@@ -59,7 +59,7 @@ export async function fetchSpotPrices(): Promise<IndexSpot[]> {
   }
 }
 
-// fetchSpotPrices().then(spots => {
-//   console.log('\nFinal Spot Prices:');
-//   spots.forEach(s => console.log(`${s.symbol}: ${s.spotPrice}`));
-// });
+fetchSpotPrices().then(spots => {
+  console.log('\nFinal Spot Prices:');
+  spots.forEach(s => console.log(`${s.symbol}: ${s.spotPrice}`));
+});
