@@ -17,7 +17,7 @@ const STRIKE_CONFIG: Record<string, StrikeConfig> = {
   'SENSEX': { stepSize: 100, range: 40 }
 };
 
-async function populateOptionsContracts() {
+export async function populateOptionsContracts() {
   // Get spot prices and expiry dates
   console.log('Fetching spot prices...');
   const spots = await fetchSpotPrices();

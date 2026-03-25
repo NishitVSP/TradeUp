@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-interface IndexSpot {
+export interface IndexSpot {
   symbol: string;
   spotPrice: number;
 }
