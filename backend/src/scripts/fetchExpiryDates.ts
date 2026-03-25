@@ -8,11 +8,12 @@ export function fetchExpiryDates(): IndexExpiries[] {
     {
       index: 'NIFTY',
       expiries: [
-        '24-03-2026',
+        
         '30-03-2026',
         '07-04-2026', 
         '13-04-2026',
-        '21-04-2026'
+        '21-04-2026',
+        '28-04-2026'
       ]
     },
     {
@@ -48,7 +49,6 @@ export function fetchExpiryDates(): IndexExpiries[] {
     {
       index: 'BANKEX',
       expiries: [
-        '25-03-2026',
         '30-04-2026',
         '27-05-2026',
         '30-06-2026',
@@ -58,11 +58,11 @@ export function fetchExpiryDates(): IndexExpiries[] {
     {
       index: 'SENSEX',
       expiries: [
-        '19-03-2026',
-        '25-03-2026',
         '02-04-2026',
         '09-04-2026',
-        '16-04-2026'
+        '16-04-2026',
+        '23-04-2026',
+        '30-04-2026'
       ]
     }
   ];

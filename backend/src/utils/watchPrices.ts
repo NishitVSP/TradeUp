@@ -1,5 +1,5 @@
 // backend/src/watchPrices.ts
-import { startSimulation, indexPrices } from './services/indexPoller';
+import { startSimulation, indexPrices } from '../services/indexPoller';
 
 async function watch() {
   await startSimulation();
