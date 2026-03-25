@@ -1,0 +1,26 @@
+<svg width="530" height="155" viewBox="0 0 530 155" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- ICON MARK -->
+  <rect x="18"  y="108" width="24" height="46"  rx="5" fill="#10b981"/>
+  <rect x="28"  y="98"  width="4"  height="12"  rx="2" fill="#059669"/>
+
+  <rect x="48"  y="82"  width="24" height="72"  rx="5" fill="#10b981"/>
+  <rect x="58"  y="71"  width="4"  height="13"  rx="2" fill="#059669"/>
+
+  <rect x="78"  y="54"  width="24" height="100" rx="5" fill="#10b981"/>
+  <rect x="88"  y="42"  width="4"  height="14"  rx="2" fill="#059669"/>
+
+  <rect x="87"  y="14"  width="7"  height="32"  rx="3" fill="#10b981"/>
+  <polygon points="90.5,4  75,28  106,28" fill="#10b981"/>
+
+  <!-- WORDMARK: Trade + Up joined -->
+  <text
+    x="122"
+    y="136"
+    font-family="'Sora', 'Helvetica Neue', 'Arial Black', Arial, sans-serif"
+    font-size="92"
+    font-weight="800"
+    letter-spacing="-2.5"
+  ><tspan fill="#111827">Trade</tspan><tspan fill="#10b981">Up</tspan></text>
+
+</svg>
