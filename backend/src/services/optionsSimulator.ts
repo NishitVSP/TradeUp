@@ -60,7 +60,7 @@ export async function addContractToWatch(
   });
 
   const contract = await db.get(
-    `SELECT id FROM options_contract 
+    `SELECT contract_id FROM options_contract 
      WHERE index_name = ? AND strike_price = ? AND option_type = ? 
      ORDER BY expiry_date ASC LIMIT 1`,
     [indexName, strikePrice, optionType]
@@ -143,7 +143,7 @@ async function updateWatchedContractsLTP(): Promise<void> {
 
       // Get the nearest expiry contract for this strike
       const contract = await db.get(
-        `SELECT id, expiry_date FROM options_contract 
+        `SELECT contract_id, expiry_date FROM options_contract 
          WHERE index_name = ? AND strike_price = ? AND option_type = ? 
          ORDER BY expiry_date ASC LIMIT 1`,
         [indexName, strikePrice, optionType]
@@ -161,8 +161,8 @@ async function updateWatchedContractsLTP(): Promise<void> {
       await db.run(
         `UPDATE options_contract 
          SET ltp = ?, last_updated = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
-        [newLTP, contract.id]
+         WHERE contract_id = ?`,
+        [newLTP, contract.contract_id]
       );
 
       logger.debug(`Updated ${contractKey}: LTP = ${newLTP} (Spot: ${spotPrice})`);

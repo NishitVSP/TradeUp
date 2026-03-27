@@ -12,10 +12,9 @@ export function HomeNavbar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        py: 2.5,
-        px: { xs: 2, md: 0 },
+        
         borderBottom: '1px solid #f3f4f6',
-        mb: 2,
+        mb: 0,
       }}
     >
       {/* Logo */}
@@ -27,8 +26,8 @@ export function HomeNavbar() {
         <Image
           src="/tradeupLogo_brand.svg"
           alt="TradeUp - Learn Option Trading 24x7"
-          width={240}
-          height={70}
+          width={200}
+          height={50}
           style={{ objectFit: 'contain' }}
           priority
         />

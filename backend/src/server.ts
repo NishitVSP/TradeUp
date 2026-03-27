@@ -4,7 +4,7 @@ import { logger } from './utils/logger';
 import authRoutes from './routes/auth';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT =  3001;
 
 // Middleware
 app.use(cors({
@@ -34,11 +34,12 @@ app.get('/health', (req, res) => {
 });
 
 // 404 handler
-app.use((req, res) => {
+app.use((req, res, next) => {
   res.status(404).json({
     success: false,
     message: 'Route not found'
   });
+  next();
 });
 
 // Global error handler

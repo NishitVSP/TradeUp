@@ -95,7 +95,7 @@ export function HeroSection() {
           fontSize: { xs: '1rem', md: '1.125rem' },
         }}
       >
-        Master options with real Black-Scholes pricing across India's top indexes — 
+        Master option trading across India's top indexes — 
         no capital at risk, ever.
       </Typography>
 
