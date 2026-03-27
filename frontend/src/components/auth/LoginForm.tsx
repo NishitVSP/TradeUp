@@ -31,8 +31,8 @@ export function LoginForm() {
       const data = await response.json();
 
       if (data.success) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('token', data.data.token);
+        localStorage.setItem('user', JSON.stringify(data.data));
         router.push('/dashboard');
       } else {
         setError(data.message || 'Login failed');
