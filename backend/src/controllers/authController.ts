@@ -231,3 +231,64 @@ export async function getProfile(req: any, res: Response): Promise<void> {
     });
   }
 }
+
+/**
+ * Update user balance (add virtual funds)
+ */
+export async function updateBalance(req: any, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { amount } = req.body;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Valid amount is required'
+      });
+      return;
+    }
+
+    const db = await open({
+      filename: './data/tradeup.db',
+      driver: sqlite3.Database
+    });
+
+    // Update balance
+    await db.run(
+      'UPDATE users SET balance = balance + ? WHERE user_id = ?',
+      [amount, userId]
+    );
+
+    // Get updated user data
+    const user = await db.get(
+      `SELECT user_id, user_name, email, phone_number, balance, created_at
+       FROM users WHERE user_id = ?`,
+      [userId]
+    );
+
+    await db.close();
+
+    logger.info(`Balance updated for user ${userId}: +${amount}`);
+
+    res.json({
+      success: true,
+      message: 'Balance updated successfully',
+      data: user
+    });
+
+  } catch (error) {
+    logger.error('Update balance error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+}
