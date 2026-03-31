@@ -16,10 +16,10 @@ import {
 } from '@/components/dashboard';
 
 interface User {
-  userId: number;
-  userName: string;
+  user_id: number;
+  user_name: string;
   email: string;
-  phoneNumber?: string;
+  phone_number?: string;
   balance: number;
   created_at?: string;
 }
@@ -27,33 +27,46 @@ interface User {
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
+    fetchUserProfile();
+  }, []);
 
-    if (!token || !userData) {
+  const fetchUserProfile = async () => {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
       router.push('/login');
       return;
     }
 
     try {
-      if (userData) {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
+      const response = await fetch('http://localhost:3001/api/auth/profile', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUser(data.data);
       } else {
-        throw new Error('No user data found');
+        // Token invalid or expired
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        router.push('/login');
       }
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      router.push('/login');
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError('Failed to load user profile');
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -98,6 +111,40 @@ export default function DashboardPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: '#ef4444', fontFamily: '"DM Sans", sans-serif', marginBottom: '16px' }}>
+            {error}
+          </p>
+          <button
+            onClick={() => router.push('/login')}
+            style={{
+              padding: '10px 20px',
+              background: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontFamily: '"DM Sans", sans-serif',
+            }}
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return null;
   }
@@ -105,53 +152,7 @@ export default function DashboardPage() {
   return (
     <DashboardContainer>
       {/* Header with logout */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <h1
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: '1.75rem',
-              fontWeight: 700,
-              color: '#1e293b',
-              margin: 0,
-            }}
-          >
-            TradeUp Dashboard
-          </h1>
-          <p
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: '0.95rem',
-              color: '#64748b',
-              margin: '4px 0 0 0',
-            }}
-          >
-            Welcome back, {user.userName}
-          </p>
-        </Box>
-        <IconButton
-          onClick={handleLogout}
-          sx={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            '&:hover': {
-              background: '#f8fafc',
-              borderColor: '#cbd5e1',
-            },
-          }}
-        >
-          <LogOut size={20} color="#64748b" />
-        </IconButton>
-      </Box>
-
+      
       {/* Three Column Layout */}
       <DashboardGrid>
         {/* Column 1: User Info (20%) */}
@@ -174,6 +175,18 @@ export default function DashboardPage() {
           <Terminal />
         </Column>
       </DashboardGrid>
+
+      {/* Add keyframes for spinner animation */}
+      <style jsx global>{`
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </DashboardContainer>
   );
 }

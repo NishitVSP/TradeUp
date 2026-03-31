@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert } from '@mui/material';
+import { useRouter } from 'next/navigation';
+import { Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, IconButton } from '@mui/material';
+import { LogOut } from 'lucide-react';
 import {
   Panel,
   PanelHeader,
@@ -15,11 +17,14 @@ import {
 import { Button } from '../ui';
 
 interface User {
-  userId: number;
-  userName: string;
+  user_id?: number;
+  userId?: number;
+  user_name?: string;
+  userName?: string;
   email: string;
+  phone_number?: string;
   phoneNumber?: string;
-  balance: number;
+  balance?: number;
   created_at?: string;
 }
 
@@ -33,6 +38,13 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const router = useRouter();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    router.push('/login');
+  };
 
   const handleAddFunds = async () => {
     const numAmount = parseFloat(amount);
@@ -62,14 +74,6 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
         onBalanceUpdate(data.data.balance);
         setAddFundsOpen(false);
         setAmount('');
-        
-        // Update localStorage
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          userData.balance = data.data.balance;
-          localStorage.setItem('user', JSON.stringify(userData));
-        }
       } else {
         setError(data.message || 'Failed to add funds');
       }
@@ -89,19 +93,52 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
     });
   };
 
+  const formatBalance = (balance: number | undefined | null): string => {
+    const bal = balance ?? 0;
+    return bal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Handle both snake_case (from DB) and camelCase (from localStorage)
+  const userId = user.user_id ?? user.userId;
+  const userName = user.user_name ?? user.userName;
+  const phoneNumber = user.phone_number ?? user.phoneNumber;
+  const balance = user.balance ?? 0;
+
   return (
     <>
       <Panel>
         <PanelHeader>
-          <PanelTitle>Account</PanelTitle>
-        </PanelHeader>
+          <Box sx={{ mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+              <img
+                src="/tradeupLogo_brand.svg"
+                alt="TradeUp Logo"
+                style={{
+                  height: '40px',
+                  width: 'auto',
+                }}
+              />
+            </Box>
+            <p
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: '0.95rem',
+              color: '#64748b',
+              margin: '4px 0 0 0',
+            }}
+          >
+            Welcome back, {userName}
+          </p>
+        </Box>
+        
+      </PanelHeader>
 
         <BalanceCard>
           <InfoLabel sx={{ color: 'rgba(255, 255, 255, 0.9)' }}>
             Virtual Balance
           </InfoLabel>
           <BalanceAmount>
-            ₹{user.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            ₹{formatBalance(balance)}
           </BalanceAmount>
           <Button
             variant="primary"
@@ -124,7 +161,7 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
         <Box>
           <InfoRow>
             <InfoLabel>Name</InfoLabel>
-            <InfoValue>{user.userName}</InfoValue>
+            <InfoValue>{userName || 'N/A'}</InfoValue>
           </InfoRow>
           <InfoRow>
             <InfoLabel>Email</InfoLabel>
@@ -132,7 +169,7 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
           </InfoRow>
           <InfoRow>
             <InfoLabel>Phone</InfoLabel>
-            <InfoValue>{user.phoneNumber || 'N/A'}</InfoValue>
+            <InfoValue>{phoneNumber || 'N/A'}</InfoValue>
           </InfoRow>
           <InfoRow>
             <InfoLabel>Member Since</InfoLabel>
@@ -140,8 +177,25 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
           </InfoRow>
           <InfoRow>
             <InfoLabel>User ID</InfoLabel>
-            <InfoValue>#{user.userId}</InfoValue>
+            <InfoValue>#{userId || 'N/A'}</InfoValue>
           </InfoRow>
+        </Box>
+
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <IconButton
+            onClick={handleLogout}
+            sx={{
+              background: '#f90101f6',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              '&:hover': {
+                background: '#f90101f6',
+                borderColor: '#f90101f6',
+              },
+            }}
+          >
+            <LogOut size={20} color="#ffffff" />
+          </IconButton>
         </Box>
       </Panel>
 

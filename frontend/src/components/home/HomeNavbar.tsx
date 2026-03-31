@@ -12,7 +12,7 @@ export function HomeNavbar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        
+        pt: 2,
         borderBottom: '1px solid #f3f4f6',
         mb: 0,
       }}

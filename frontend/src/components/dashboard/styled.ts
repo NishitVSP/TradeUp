@@ -21,7 +21,7 @@ export const Column = styled(Box)<{ width: string }>(({ width }) => ({
 }));
 
 export const Panel = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(3),
+  padding: theme.spacing(2),
   borderRadius: '16px',
   background: '#ffffff',
   boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
@@ -40,8 +40,8 @@ export const PanelHeader = styled(Box)({
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  marginBottom: '20px',
-  paddingBottom: '16px',
+  marginBottom: '10px',
+  paddingBottom: '10px',
   borderBottom: '2px solid #e2e8f0',
 });
 

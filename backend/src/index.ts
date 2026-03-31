@@ -4,9 +4,9 @@ import { initializeOptionsSimulator, stopSimulation as stopOptionsSimulation } f
 import { startServer } from './server';
 
 async function main() {
-  console.log('Populating options contracts...');
-  //await populateOptionsContracts();
-  console.log('Options contracts populated\n');
+  // console.log('Populating options contracts...');
+  // //await populateOptionsContracts();
+  // console.log('Options contracts populated\n');
   
   console.log('Starting TradeUp Backend...');
   await startSimulation();

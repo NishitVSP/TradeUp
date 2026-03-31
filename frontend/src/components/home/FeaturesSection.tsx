@@ -4,7 +4,7 @@ import { Box, Typography } from '@mui/material';
 
 const FEATURES = [
   {
-    icon: '📈',
+    
     title: 'Real-time Pricing',
     description:
       'Black-Scholes formula calculates accurate option premiums using live volatility, time decay, and interest rates.',
@@ -13,7 +13,7 @@ const FEATURES = [
     border: 'rgba(16, 185, 129, 0.18)',
   },
   {
-    icon: '⚡',
+    
     title: '24×7 Trading',
     description:
       'Markets never sleep here. Practice intraday, overnight, or weekend strategies without waiting for open hours.',
@@ -22,7 +22,7 @@ const FEATURES = [
     border: 'rgba(245, 158, 11, 0.18)',
   },
   {
-    icon: '🎓',
+    
     title: 'Risk-Free Learning',
     description:
       'Simulated paper trades with real market data. Build conviction and test strategies with zero financial exposure.',
@@ -85,23 +85,7 @@ export function FeaturesSection() {
               },
             }}
           >
-            <Box
-              sx={{
-                width: 52,
-                height: 52,
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem',
-                mb: 3,
-                border: `1px solid ${feature.border}`,
-                bgcolor: '#fff',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-              }}
-            >
-              {feature.icon}
-            </Box>
+            
             <Typography
               sx={{
                 fontFamily: '"DM Sans", sans-serif',
