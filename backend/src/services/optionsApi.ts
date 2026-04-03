@@ -14,10 +14,11 @@ export class OptionsApiService {
   static async watchContract(
     indexName: string, 
     strikePrice: number, 
+    expiryDate: string,
     optionType: 'CE' | 'PE'
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const success = await addContractToWatch(indexName, strikePrice, optionType);
+      const success = await addContractToWatch(indexName, strikePrice, expiryDate, optionType);
       
       if (success) {
         logger.info(`Frontend requested to watch: ${indexName} ${strikePrice} ${optionType}`);
@@ -37,10 +38,11 @@ export class OptionsApiService {
   static unwatchContract(
     indexName: string, 
     strikePrice: number, 
+    expiryDate: string,
     optionType: 'CE' | 'PE'
   ): { success: boolean; message: string } {
     try {
-      removeContractFromWatch(indexName, strikePrice, optionType);
+      removeContractFromWatch(indexName, strikePrice, expiryDate, optionType);
       logger.info(`Frontend requested to unwatch: ${indexName} ${strikePrice} ${optionType}`);
       return { success: true, message: `Stopped watching ${indexName} ${strikePrice} ${optionType}` };
     } catch (error) {
@@ -75,8 +77,8 @@ export class OptionsApiService {
    * Get LTPs for multiple contracts (batch request)
    */
   static async getMultipleLTPs(
-    contracts: Array<{ indexName: string; strikePrice: number; optionType: 'CE' | 'PE' }>
-  ): Promise<{ success: boolean; data: Array<{ indexName: string; strikePrice: number; optionType: 'CE' | 'PE'; ltp: number | null }>; message: string }> {
+    contracts: Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE' }>
+  ): Promise<{ success: boolean; data: Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE'; ltp: number | null }>; message: string }> {
     try {
       const data = await getMultipleContractLTPs(contracts);
       return { success: true, data, message: 'Success' };

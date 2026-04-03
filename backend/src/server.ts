@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { logger } from './utils/logger';
 import authRoutes from './routes/auth';
+import optionsRoutes from './routes/options';
 
 const app = express();
 const PORT =  3001;
@@ -20,6 +21,8 @@ app.use((req, res, next) => {
   logger.info(`${req.method} ${req.path} - ${req.ip}`);
   next();
 });
+
+app.use('/api/options', optionsRoutes);
 
 // Routes
 app.use('/api/auth', authRoutes);
