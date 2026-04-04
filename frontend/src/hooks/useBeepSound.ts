@@ -2,7 +2,8 @@ import { useCallback, useRef } from 'react';
 
 /**
  * Returns a `playBeep()` function.
- * Place beepNotificationSound.mp3 in /public/sounds/beepNotificationSound.mp3
+ * File lives at: frontend/public/beepNotificationSound.mp3
+ * Next.js serves public/ at the root, so the URL is just /beepNotificationSound.mp3
  */
 export function useBeepSound() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -10,16 +11,15 @@ export function useBeepSound() {
   const playBeep = useCallback(() => {
     try {
       if (!audioRef.current) {
-        audioRef.current = new Audio('../../public/beepNotificationSound.mp3');
+        audioRef.current = new Audio('/beepNotificationSound.mp3');
         audioRef.current.volume = 0.5;
       }
-      // Rewind and play — handles rapid repeated clicks cleanly
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {
-        // Autoplay blocked before user interaction — silently ignore
+        // Blocked before first user interaction — silently ignore
       });
     } catch {
-      // Audio API not available (SSR or test env)
+      // SSR / test environment — no Audio API
     }
   }, []);
 

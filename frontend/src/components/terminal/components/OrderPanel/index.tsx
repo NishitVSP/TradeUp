@@ -56,10 +56,9 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
       lotSize,
       orderType:      parsedLimit !== null ? 'LIMIT' : 'MARKET',
       limitPrice:     parsedLimit,
-      targetPts:      t.pdTarget  !== '' ? parseFloat(t.pdTarget)  : null,
-      slPts:          t.pdSL      !== '' ? parseFloat(t.pdSL)      : null,
-      trailPts:       t.pdTrail   !== '' ? parseFloat(t.pdTrail)   : null,
-      mtmTrailPts:    t.mtmTrail  !== '' ? parseFloat(t.mtmTrail)  : null,
+      targetPts:  t.pdTarget !== '' ? parseFloat(t.pdTarget) : null,
+      slPts:      t.pdSL    !== '' ? parseFloat(t.pdSL)    : null,
+      trailPts:   t.pdTrail !== '' ? parseFloat(t.pdTrail) : null,
     }));
   };
 

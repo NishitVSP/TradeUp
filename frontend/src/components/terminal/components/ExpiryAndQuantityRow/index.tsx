@@ -8,15 +8,18 @@ import StepperInput from '../StepperInput';
 
 const ExpiryAndQuantityRow: React.FC = () => {
   const dispatch = useDispatch();
-  const { lots, activeIndexName, activeExpiry, indexExpiries } = useSelector((s: RootState) => s.terminal);
+  const { lots, activeIndexName, activeExpiry, indexSelectedExpiries } = useSelector(
+    (s: RootState) => s.terminal
+  );
 
-  const expiries = indexExpiries[activeIndexName] ?? [];
+  // Only expiries the user actually selected for this index
+  const expiries = indexSelectedExpiries[activeIndexName] ?? [];
   const lotSize  = LOT_SIZES[activeIndexName] ?? 1;
   const totalQty = lots * lotSize;
 
   return (
     <TerminalRow sx={{ gap: '6px' }}>
-      {/* Expiry dropdown - list built from what was added for this index */}
+      {/* Expiry dropdown — only user-selected expiries */}
       <Box sx={{ flex: 1.6, minWidth: 0 }}>
         <TerminalLabel>Expiry</TerminalLabel>
         {expiries.length > 0 ? (
@@ -42,13 +45,17 @@ const ExpiryAndQuantityRow: React.FC = () => {
         )}
       </Box>
 
-      {/* Lots stepper */}
+      {/* Lots stepper — user can type OR use arrows */}
       <Box sx={{ flex: 0.8, minWidth: 0 }}>
         <TerminalLabel>Lots</TerminalLabel>
         <StepperInput
           value={lots}
-          onChange={(v) => { const n = parseInt(v, 10); if (!isNaN(n) && n > 0) dispatch(setLots(n)); }}
+          onChange={(v) => {
+            const n = parseInt(v, 10);
+            if (!isNaN(n) && n > 0) dispatch(setLots(n));
+          }}
           onStep={(dir) => dispatch(stepLots(dir))}
+          allowTyping   // lots allows free text entry
         />
       </Box>
 

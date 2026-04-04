@@ -1,17 +1,12 @@
 import React from 'react';
-import { Box, Input, Tooltip, Typography } from '@mui/joy';
+import { Box, Input, Tooltip } from '@mui/joy';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
-import {
-  setPdTarget,
-  setPdSL,
-  setPdTrail,
-  setMtmTrail,
-} from '@/store/slices/terminalSlice';
+import { setPdTarget, setPdSL, setPdTrail } from '@/store/slices/terminalSlice';
 import { TerminalLabel } from '../../styled';
 
 interface FieldConfig {
-  key: 'pdTarget' | 'pdSL' | 'pdTrail' | 'mtmTrail';
+  key: 'pdTarget' | 'pdSL' | 'pdTrail';
   label: string;
   placeholder: string;
   tooltip: string;
@@ -37,39 +32,29 @@ const FIELDS: FieldConfig[] = [
     key: 'pdTrail',
     label: 'PD Trail',
     placeholder: 'Pts',
-    tooltip: 'Trailing stop-loss per position in points — trails the best achieved price',
+    tooltip: 'Trailing stop-loss in points — trails the best achieved price per position',
     color: '#f59e0b',
   },
-  {
-    key: 'mtmTrail',
-    label: 'MTM Trail',
-    placeholder: 'Pts',
-    tooltip: 'Mark-to-market trailing stop — based on combined PnL of all open positions',
-    color: '#6366f1',
-  },
 ];
+
+const setters = {
+  pdTarget: setPdTarget,
+  pdSL:     setPdSL,
+  pdTrail:  setPdTrail,
+};
 
 const PredefinedPtsRow: React.FC = () => {
   const dispatch = useDispatch();
   const terminal = useSelector((s: RootState) => s.terminal);
 
-  const setters = {
-    pdTarget: setPdTarget,
-    pdSL: setPdSL,
-    pdTrail: setPdTrail,
-    mtmTrail: setMtmTrail,
-  };
-
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '6px',
-        p: '6px 8px',
-        borderBottom: '1px solid #f0f0f0',
-      }}
-    >
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, 1fr)',
+      gap: '6px',
+      p: '6px 8px',
+      borderBottom: '1px solid #f0f0f0',
+    }}>
       {FIELDS.map(({ key, label, placeholder, tooltip, color }) => (
         <Tooltip key={key} title={tooltip} placement="top" size="sm">
           <Box sx={{ minWidth: 0 }}>

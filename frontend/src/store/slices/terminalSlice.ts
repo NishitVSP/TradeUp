@@ -10,7 +10,6 @@ export const LOT_SIZES: Record<string, number> = {
   SENSEX:     20,
 };
 
-// Strike step per index
 export const STRIKE_STEPS: Record<string, number> = {
   NIFTY:      50,
   BANKNIFTY:  100,
@@ -46,10 +45,11 @@ export interface OrderEntry {
   executedPrice: number | null;
   placedAt: string;
   executedAt: string | null;
+  // Risk params attached at time of order
   targetPts: number | null;
   slPts: number | null;
   trailPts: number | null;
-  mtmTrailPts: number | null;
+  // NOTE: mtmTrailPts removed from order-level — MTM trailing is a global/position-level concern
 }
 
 export interface Position {
@@ -66,26 +66,42 @@ export interface Position {
   currentLtp: number | null;
   pnl: number | null;
   openedAt: string;
-  // Editable risk params (can be changed from Positions panel)
+  // Editable risk params (user can edit from Positions panel after trade)
   targetPts: number | null;
   slPts: number | null;
   trailPts: number | null;
-  mtmTrailPts: number | null;
+  mtmTrailPts: number | null;  // kept here — global/position-level MTM trail
   highestPnl: number | null;
   status: 'OPEN' | 'CLOSED';
 }
 
+// Shape of an order row returned from the backend (schema-aligned)
+export interface ApiOrderRow {
+  order_id: number;
+  index_name: string;
+  strike_price: number;
+  expiry_date: string;
+  option_type: 'CE' | 'PE';
+  action: 'BUY' | 'SELL';
+  order_type: 'LMT' | 'MKT' | 'SL';
+  quantity: number;
+  limit_price: number | null;
+  status: 'PENDING' | 'EXECUTED' | 'CANCELLED' | 'REJECTED';
+  placed_at: string;
+  executed_at: string | null;
+  execution_price: number | null;
+}
+
 interface TerminalState {
-  // ── Contracts added from OptionSelector ─────────────────────────────────
   selectedContracts: SelectedContract[];
 
-  // Per-index data (built as user adds contracts)
-  indexExpiries: Record<string, string[]>;   // { NIFTY: ['2024-12-05', ...], BANKNIFTY: [...] }
-  indexStrikes: Record<string, number[]>;    // { NIFTY: [24000, 24050, ...] }
-  atmStrikes: Record<string, number>;        // { NIFTY: 24000, BANKNIFTY: 52000 }
-  addedIndexes: string[];                    // ordered list of indexes user added
+  // Per-index: only the expiries the user has actually selected in OptionSelector
+  indexSelectedExpiries: Record<string, string[]>;
+  // Per-index: only the strikes the user has actually selected in OptionSelector
+  indexSelectedStrikes: Record<string, number[]>;
+  atmStrikes: Record<string, number>;
+  addedIndexes: string[];
 
-  // ── Active selection in terminal ─────────────────────────────────────────
   activeIndexName: string;
   activeExpiry: string;
   ceStrike: number | null;
@@ -93,47 +109,39 @@ interface TerminalState {
   ceLtp: number | null;
   peLtp: number | null;
 
-  // ── Order inputs ──────────────────────────────────────────────────────────
   lots: number;
   ceBuyLimit: string;
   ceSellLimit: string;
   peBuyLimit: string;
   peSellLimit: string;
 
-  // ── Predefined risk per trade ─────────────────────────────────────────────
+  // Predefined pts for next trade (mtmTrail removed)
   pdTarget: string;
   pdSL: string;
   pdTrail: string;
-  mtmTrail: string;
 
-  // ── Global MTM protection (Positions panel) ───────────────────────────────
-  globalMtmTarget: string;   // ₹ profit at which all positions auto-close
-  globalMtmSL: string;       // ₹ loss at which all positions auto-close
+  // Global MTM protection in Positions panel
+  globalMtmTarget: string;
+  globalMtmSL: string;
 
-  // ── Checkboxes ────────────────────────────────────────────────────────────
   limitOnLtp: boolean;
   slLimitProtection: boolean;
 
-  // ── Books ─────────────────────────────────────────────────────────────────
+  // Optimistic orders placed this session (before backend fetch)
   orders: OrderEntry[];
   positions: Position[];
 
-  // ── UI ────────────────────────────────────────────────────────────────────
-  activeTab: number;  // 0=Orders 1=Trades
+  activeTab: number;
   loading: boolean;
   error: string | null;
 }
 
-// ─── Default strikes for NIFTY so terminal is usable before any contract added
 const DEFAULT_ATM = 24000;
-const DEFAULT_NIFTY_STRIKES = Array.from({ length: 41 }, (_, i) =>
-  DEFAULT_ATM + (i - 20) * STRIKE_STEPS['NIFTY']
-);
 
 const initialState: TerminalState = {
   selectedContracts: [],
-  indexExpiries: { NIFTY: [] },
-  indexStrikes: { NIFTY: DEFAULT_NIFTY_STRIKES },
+  indexSelectedExpiries: {},
+  indexSelectedStrikes: {},
   atmStrikes: { NIFTY: DEFAULT_ATM },
   addedIndexes: ['NIFTY'],
 
@@ -153,7 +161,6 @@ const initialState: TerminalState = {
   pdTarget: '',
   pdSL: '',
   pdTrail: '',
-  mtmTrail: '',
 
   globalMtmTarget: '',
   globalMtmSL: '',
@@ -177,9 +184,9 @@ function calcPnl(pos: Position): number | null {
   return (pos.currentLtp - pos.entryPrice) * pos.quantity * dir;
 }
 
-function buildStrikeList(atm: number, index: string, count = 41): number[] {
-  const step = STRIKE_STEPS[index] ?? 50;
-  return Array.from({ length: count }, (_, i) => atm + (i - Math.floor(count / 2)) * step);
+// Append a value to a de-duped array
+function appendUnique<T>(arr: T[], val: T): T[] {
+  return arr.includes(val) ? arr : [...arr, val];
 }
 
 // ─── Slice ────────────────────────────────────────────────────────────────────
@@ -189,49 +196,61 @@ const terminalSlice = createSlice({
   initialState,
   reducers: {
 
-    // ── Called from OptionSelector after API success ──────────────────────────
+    // ── Called from OptionSelector "Add to Terminal" ──────────────────────────
+    // Adds all strikes from ATM to the selected offset (inclusive)
     addToTerminal: (
       state,
       action: PayloadAction<{
-        contract: SelectedContract;
-        expiryDate: string;
+        contracts: SelectedContract[];
+        expiryDate: string;      // the one expiry the user picked
         atmStrike: number;
-        allExpiries: string[];   // full expiry list for this index
       }>
     ) => {
-      const { contract: c, expiryDate, atmStrike, allExpiries } = action.payload;
-      const key = `${c.indexName}-${c.strikePrice}-${c.expiryDate}-${c.optionType}`;
+      const { contracts, expiryDate, atmStrike } = action.payload;
 
-      // Add contract if new
-      if (!state.selectedContracts.find(
-        (x) => `${x.indexName}-${x.strikePrice}-${x.expiryDate}-${x.optionType}` === key
-      )) {
-        state.selectedContracts.push(c);
+      contracts.forEach((c) => {
+        const key = `${c.indexName}-${c.strikePrice}-${c.expiryDate}-${c.optionType}`;
+
+        // Add contract if not already present
+        if (!state.selectedContracts.find(
+          (x) => `${x.indexName}-${x.strikePrice}-${x.expiryDate}-${x.optionType}` === key
+        )) {
+          state.selectedContracts.push(c);
+        }
+      });
+
+      // Register index (use first contract's indexName)
+      const indexName = contracts[0]?.indexName;
+      if (indexName && !state.addedIndexes.includes(indexName)) {
+        state.addedIndexes.push(indexName);
       }
 
-      // Register index
-      if (!state.addedIndexes.includes(c.indexName)) {
-        state.addedIndexes.push(c.indexName);
-      }
+      // Append this expiry to per-index selected expiries (de-duped)
+      const prevExpiries = state.indexSelectedExpiries[indexName] ?? [];
+      state.indexSelectedExpiries[indexName] = appendUnique(prevExpiries, expiryDate);
 
-      // Update expiries for this index
-      state.indexExpiries[c.indexName] = allExpiries;
+      // Append all strikes to per-index selected strikes (de-duped, sorted asc)
+      const prevStrikes = state.indexSelectedStrikes[indexName] ?? [];
+      const newStrikes = contracts.reduce((arr, c) => appendUnique(arr, c.strikePrice), prevStrikes);
+      state.indexSelectedStrikes[indexName] = [...newStrikes].sort((a, b) => a - b);
 
-      // Update ATM and build strike list
-      state.atmStrikes[c.indexName] = atmStrike;
-      state.indexStrikes[c.indexName] = buildStrikeList(atmStrike, c.indexName);
+      // Update ATM snapshot
+      state.atmStrikes[indexName] = atmStrike;
 
-      // Switch active index/expiry to newly added contract
-      state.activeIndexName = c.indexName;
+      // Switch active context to what was just added
+      state.activeIndexName = indexName;
       state.activeExpiry = expiryDate;
 
-      // Auto-set strike for the relevant side
-      if (c.optionType === 'CE') {
-        state.ceStrike = c.strikePrice;
-        state.ceLtp = c.ltp;
-      } else {
-        state.peStrike = c.strikePrice;
-        state.peLtp = c.ltp;
+      // Set active strikes to the first contract (usually ATM)
+      const firstContract = contracts[0];
+      if (firstContract) {
+        if (firstContract.optionType === 'CE') {
+          state.ceStrike = firstContract.strikePrice;
+          state.ceLtp = firstContract.ltp;
+        } else {
+          state.peStrike = firstContract.strikePrice;
+          state.peLtp = firstContract.ltp;
+        }
       }
     },
 
@@ -241,15 +260,13 @@ const terminalSlice = createSlice({
       );
     },
 
-    // ── Active index/expiry selection in terminal dropdowns ──────────────────
+    // ── Active index / expiry ─────────────────────────────────────────────────
     setActiveIndexName: (state, action: PayloadAction<string>) => {
       state.activeIndexName = action.payload;
-      // Switch expiry to first available for this index
-      const expiries = state.indexExpiries[action.payload] ?? [];
+      const expiries = state.indexSelectedExpiries[action.payload] ?? [];
       state.activeExpiry = expiries[0] ?? '';
-      // Default strikes to ATM
       const atm = state.atmStrikes[action.payload];
-      if (atm) {
+      if (atm !== undefined) {
         state.ceStrike = atm;
         state.peStrike = atm;
         state.ceLtp = null;
@@ -259,72 +276,67 @@ const terminalSlice = createSlice({
 
     setActiveExpiry: (state, action: PayloadAction<string>) => {
       state.activeExpiry = action.payload;
-      // Update LTPs from selectedContracts for the new expiry
       const ceC = state.selectedContracts.find(
-        (c) => c.indexName === state.activeIndexName &&
-               c.expiryDate === action.payload &&
+        (c) => c.indexName === state.activeIndexName && c.expiryDate === action.payload &&
                c.strikePrice === state.ceStrike && c.optionType === 'CE'
       );
       state.ceLtp = ceC?.ltp ?? null;
       const peC = state.selectedContracts.find(
-        (c) => c.indexName === state.activeIndexName &&
-               c.expiryDate === action.payload &&
+        (c) => c.indexName === state.activeIndexName && c.expiryDate === action.payload &&
                c.strikePrice === state.peStrike && c.optionType === 'PE'
       );
       state.peLtp = peC?.ltp ?? null;
     },
 
-    // ── Strike selection (also used by stepper +/-) ───────────────────────────
+    // ── Strike selection ──────────────────────────────────────────────────────
     setCeStrike: (state, action: PayloadAction<number>) => {
       state.ceStrike = action.payload;
       const c = state.selectedContracts.find(
-        (x) => x.indexName === state.activeIndexName &&
-               x.expiryDate === state.activeExpiry &&
+        (x) => x.indexName === state.activeIndexName && x.expiryDate === state.activeExpiry &&
                x.strikePrice === action.payload && x.optionType === 'CE'
       );
       state.ceLtp = c?.ltp ?? null;
     },
+
     setPeStrike: (state, action: PayloadAction<number>) => {
       state.peStrike = action.payload;
       const c = state.selectedContracts.find(
-        (x) => x.indexName === state.activeIndexName &&
-               x.expiryDate === state.activeExpiry &&
+        (x) => x.indexName === state.activeIndexName && x.expiryDate === state.activeExpiry &&
                x.strikePrice === action.payload && x.optionType === 'PE'
       );
       state.peLtp = c?.ltp ?? null;
     },
 
-    // Stepper helpers — move strike up/down by one step in the list
+    // Step through the selected strikes list (only user-added strikes)
     stepCeStrike: (state, action: PayloadAction<1 | -1>) => {
-      const strikes = state.indexStrikes[state.activeIndexName] ?? [];
+      const strikes = state.indexSelectedStrikes[state.activeIndexName] ?? [];
       const idx = strikes.indexOf(state.ceStrike ?? 0);
       const next = strikes[idx + action.payload];
       if (next !== undefined) {
         state.ceStrike = next;
         const c = state.selectedContracts.find(
-          (x) => x.indexName === state.activeIndexName &&
-                 x.expiryDate === state.activeExpiry &&
+          (x) => x.indexName === state.activeIndexName && x.expiryDate === state.activeExpiry &&
                  x.strikePrice === next && x.optionType === 'CE'
         );
         state.ceLtp = c?.ltp ?? null;
       }
     },
+
     stepPeStrike: (state, action: PayloadAction<1 | -1>) => {
-      const strikes = state.indexStrikes[state.activeIndexName] ?? [];
+      const strikes = state.indexSelectedStrikes[state.activeIndexName] ?? [];
       const idx = strikes.indexOf(state.peStrike ?? 0);
       const next = strikes[idx + action.payload];
       if (next !== undefined) {
         state.peStrike = next;
         const c = state.selectedContracts.find(
-          (x) => x.indexName === state.activeIndexName &&
-                 x.expiryDate === state.activeExpiry &&
+          (x) => x.indexName === state.activeIndexName && x.expiryDate === state.activeExpiry &&
                  x.strikePrice === next && x.optionType === 'PE'
         );
         state.peLtp = c?.ltp ?? null;
       }
     },
 
-    // ── LTP live updates ──────────────────────────────────────────────────────
+    // ── Live LTP updates ──────────────────────────────────────────────────────
     updateContractLtp: (state, action: PayloadAction<{ key: string; ltp: number }>) => {
       const contract = state.selectedContracts.find(
         (c) => `${c.indexName}-${c.strikePrice}-${c.expiryDate}-${c.optionType}` === action.payload.key
@@ -357,11 +369,9 @@ const terminalSlice = createSlice({
       });
     },
 
-    // ── Lots stepper ──────────────────────────────────────────────────────────
-    setLots: (state, action: PayloadAction<number>) => { state.lots = Math.max(1, action.payload); },
-    stepLots: (state, action: PayloadAction<1 | -1>) => {
-      state.lots = Math.max(1, state.lots + action.payload);
-    },
+    // ── Lots ──────────────────────────────────────────────────────────────────
+    setLots:  (s, a: PayloadAction<number>) => { s.lots = Math.max(1, a.payload); },
+    stepLots: (s, a: PayloadAction<1 | -1>) => { s.lots = Math.max(1, s.lots + a.payload); },
 
     // ── Simple setters ────────────────────────────────────────────────────────
     setCeLtp:             (s, a: PayloadAction<number>)  => { s.ceLtp             = a.payload; },
@@ -373,14 +383,13 @@ const terminalSlice = createSlice({
     setPdTarget:          (s, a: PayloadAction<string>)  => { s.pdTarget          = a.payload; },
     setPdSL:              (s, a: PayloadAction<string>)  => { s.pdSL              = a.payload; },
     setPdTrail:           (s, a: PayloadAction<string>)  => { s.pdTrail           = a.payload; },
-    setMtmTrail:          (s, a: PayloadAction<string>)  => { s.mtmTrail          = a.payload; },
     setGlobalMtmTarget:   (s, a: PayloadAction<string>)  => { s.globalMtmTarget   = a.payload; },
     setGlobalMtmSL:       (s, a: PayloadAction<string>)  => { s.globalMtmSL       = a.payload; },
     setLimitOnLtp:        (s, a: PayloadAction<boolean>) => { s.limitOnLtp        = a.payload; },
     setSlLimitProtection: (s, a: PayloadAction<boolean>) => { s.slLimitProtection = a.payload; },
     setActiveTab:         (s, a: PayloadAction<number>)  => { s.activeTab          = a.payload; },
 
-    // ── Order placement ───────────────────────────────────────────────────────
+    // ── Order placement (optimistic, session-only) ────────────────────────────
     placeOrder: (
       state,
       action: PayloadAction<Omit<OrderEntry, 'id' | 'placedAt' | 'executedAt' | 'status' | 'executedPrice'>>
@@ -398,7 +407,6 @@ const terminalSlice = createSlice({
     executeOrderLocally: (state, action: PayloadAction<{ id: string; executedPrice: number }>) => {
       const order = state.orders.find((o) => o.id === action.payload.id);
       if (!order || order.status !== 'PENDING') return;
-
       order.status = 'EXECUTED';
       order.executedPrice = action.payload.executedPrice;
       order.executedAt = new Date().toISOString();
@@ -434,7 +442,7 @@ const terminalSlice = createSlice({
           targetPts:   order.targetPts,
           slPts:       order.slPts,
           trailPts:    order.trailPts,
-          mtmTrailPts: order.mtmTrailPts,
+          mtmTrailPts: null,
           highestPnl:  null,
           status:      'OPEN',
         });
@@ -455,7 +463,6 @@ const terminalSlice = createSlice({
       }
     },
 
-    // ── Edit per-position risk params from Positions panel ────────────────────
     updatePositionRiskParams: (
       state,
       action: PayloadAction<{
@@ -468,9 +475,9 @@ const terminalSlice = createSlice({
     ) => {
       const pos = state.positions.find((p) => p.id === action.payload.id);
       if (!pos) return;
-      if (action.payload.targetPts  !== undefined) pos.targetPts   = action.payload.targetPts;
-      if (action.payload.slPts      !== undefined) pos.slPts       = action.payload.slPts;
-      if (action.payload.trailPts   !== undefined) pos.trailPts    = action.payload.trailPts;
+      if (action.payload.targetPts   !== undefined) pos.targetPts   = action.payload.targetPts;
+      if (action.payload.slPts       !== undefined) pos.slPts       = action.payload.slPts;
+      if (action.payload.trailPts    !== undefined) pos.trailPts    = action.payload.trailPts;
       if (action.payload.mtmTrailPts !== undefined) pos.mtmTrailPts = action.payload.mtmTrailPts;
     },
 
@@ -504,7 +511,7 @@ export const {
   setCeLtp, setPeLtp,
   setLots, stepLots,
   setCeBuyLimit, setCeSellLimit, setPeBuyLimit, setPeSellLimit,
-  setPdTarget, setPdSL, setPdTrail, setMtmTrail,
+  setPdTarget, setPdSL, setPdTrail,
   setGlobalMtmTarget, setGlobalMtmSL,
   setLimitOnLtp, setSlLimitProtection,
   setActiveTab,
