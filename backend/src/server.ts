@@ -16,7 +16,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, _res, next) => {
-  logger.info(`${req.method} ${req.path}`);
+  if (req.path !== '/api/orders/ltps') {
+    logger.info(`${req.method} ${req.path}`);
+  }
   next();
 });
 

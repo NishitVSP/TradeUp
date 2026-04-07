@@ -32,6 +32,18 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchUserProfile(); }, []);
 
+  useEffect(() => {
+    const onBalanceUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{ balance?: number }>;
+      const b = custom.detail?.balance;
+      if (typeof b === 'number') {
+        setUser((prev) => (prev ? { ...prev, balance: b } : prev));
+      }
+    };
+    window.addEventListener('tradeup:balance-updated', onBalanceUpdated as EventListener);
+    return () => window.removeEventListener('tradeup:balance-updated', onBalanceUpdated as EventListener);
+  }, []);
+
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }

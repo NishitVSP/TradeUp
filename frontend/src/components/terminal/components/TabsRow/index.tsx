@@ -216,7 +216,16 @@ const TabsRow: React.FC = () => {
           
         </TabList>
 
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Box sx={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          minHeight: 0,
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': { width: '8px' },
+          '&::-webkit-scrollbar-thumb': { backgroundColor: '#d1d5db', borderRadius: '8px' },
+          '&::-webkit-scrollbar-track': { backgroundColor: '#f9fafb' },
+        }}>
           {/* ── Order Book (backend) ── */}
           {activeTab === 0 && (
             <>

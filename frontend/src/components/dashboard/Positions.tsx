@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Box, Typography, TextField, IconButton, Tooltip } from '@mui/material';
 import { Panel, PanelHeader, PanelTitle, PlaceholderText } from './styled';
@@ -273,13 +273,104 @@ export function Positions() {
   const dispatch  = useDispatch();
   const playBeep  = useBeepSound();
   const { positions, globalMtmTarget, globalMtmSL } = useSelector((s: RootState) => s.terminal);
+  const closingRef = useRef<Set<string>>(new Set());
+  const globalCloseTriggeredRef = useRef(false);
 
   const openPositions = positions.filter((p) => p.status === 'OPEN');
   const totalPnl      = openPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
 
+  const closePositionOnBackend = async (p: Position) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:3001/api/orders/close-position', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          indexName: p.indexName,
+          strikePrice: p.strikePrice,
+          expiryDate: p.expiryDate,
+          optionType: p.optionType,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && typeof window !== 'undefined' && typeof data.data?.balanceAfter === 'number') {
+        window.dispatchEvent(new CustomEvent('tradeup:balance-updated', { detail: { balance: data.data.balanceAfter } }));
+      }
+    } catch (e) {
+      // Keep UI responsive even if backend close call fails
+    }
+  };
+
+  const closeSinglePosition = (p: Position) => {
+    if (closingRef.current.has(p.id)) return;
+    closingRef.current.add(p.id);
+    dispatch(closePosition(p.id));
+    void closePositionOnBackend(p).finally(() => {
+      closingRef.current.delete(p.id);
+    });
+  };
+
+  // Auto-enforce per-position risk controls: target, stop-loss, trailing
+  useEffect(() => {
+    for (const p of openPositions) {
+      if (p.currentLtp === null) continue;
+      if (closingRef.current.has(p.id)) continue;
+
+      const direction = p.side === 'BUY' ? 1 : -1;
+      const currentPts = ((p.currentLtp - p.entryPrice) * direction);
+      const qty = Math.max(1, p.quantity);
+      const bestPts = p.highestPnl !== null ? (p.highestPnl / qty) : null;
+
+      const hitTarget = p.targetPts !== null && currentPts >= p.targetPts;
+      const hitSL = p.slPts !== null && currentPts <= -p.slPts;
+      const hitTrail =
+        p.trailPts !== null &&
+        bestPts !== null &&
+        bestPts > 0 &&
+        (bestPts - currentPts) >= p.trailPts;
+      const hitMtmTrail =
+        p.mtmTrailPts !== null &&
+        p.highestPnl !== null &&
+        p.highestPnl > 0 &&
+        p.pnl !== null &&
+        (p.highestPnl - p.pnl) >= (p.mtmTrailPts * qty);
+
+      if (hitTarget || hitSL || hitTrail || hitMtmTrail) {
+        closeSinglePosition(p);
+      }
+    }
+  }, [openPositions]);
+
+  // Auto-enforce global MTM target / SL by closing all open positions
+  useEffect(() => {
+    if (openPositions.length === 0) {
+      globalCloseTriggeredRef.current = false;
+      return;
+    }
+
+    const target = globalMtmTarget ? parseFloat(globalMtmTarget) : null;
+    const sl = globalMtmSL ? parseFloat(globalMtmSL) : null;
+    const hitGlobalTarget = target !== null && !Number.isNaN(target) && totalPnl >= target;
+    const hitGlobalSL = sl !== null && !Number.isNaN(sl) && totalPnl <= -sl;
+
+    if ((hitGlobalTarget || hitGlobalSL) && !globalCloseTriggeredRef.current) {
+      globalCloseTriggeredRef.current = true;
+      for (const p of openPositions) {
+        closeSinglePosition(p);
+      }
+      dispatch(closeAllPositions());
+    }
+  }, [openPositions, totalPnl, globalMtmTarget, globalMtmSL, dispatch]);
+
   const handleCloseAll = () => {
     if (openPositions.length === 0) return;
     playBeep();
+    for (const p of openPositions) {
+      closeSinglePosition(p);
+    }
     dispatch(closeAllPositions());
   };
 

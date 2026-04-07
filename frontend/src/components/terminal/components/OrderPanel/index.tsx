@@ -5,7 +5,7 @@ import { RootState } from '@/store/store';
 import {
   setCeBuyLimit, setCeSellLimit,
   setPeBuyLimit, setPeSellLimit,
-  placeOrder, executeOrderLocally,
+  placeOrder, executeOrderLocally, updateOrderStatus,
   LOT_SIZES,
 } from '@/store/slices/terminalSlice';
 import { TerminalButton } from '../../styled';
@@ -101,9 +101,11 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
           id: optimisticId,
           executedPrice: data.data.executionPrice,
         }));
+        if (typeof window !== 'undefined' && typeof data.data?.balanceAfter === 'number') {
+          window.dispatchEvent(new CustomEvent('tradeup:balance-updated', { detail: { balance: data.data.balanceAfter } }));
+        }
       } else {
-        // Mark as failed
-        dispatch(executeOrderLocally({ id: optimisticId, executedPrice: ltp ?? 0 }));
+        dispatch(updateOrderStatus({ id: optimisticId, status: 'FAILED' }));
         console.error('Order failed:', data.message);
       }
     } catch (err) {

@@ -67,6 +67,20 @@ export async function placeOrder(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Enforce virtual balance check for BUY orders before execution
+    if (action === 'BUY') {
+      const userRow = await db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId]);
+      const currentBalance = Number(userRow?.balance ?? 0);
+      const required = executionPrice * quantity;
+      if (required > currentBalance) {
+        res.status(400).json({
+          success: false,
+          message: `Insufficient balance. Required ₹${required.toFixed(2)}, available ₹${currentBalance.toFixed(2)}.`,
+        });
+        return;
+      }
+    }
+
     const now = new Date().toISOString();
 
     const orderResult = await db.run(
@@ -103,10 +117,15 @@ export async function placeOrder(req: Request, res: Response): Promise<void> {
 
     const balanceChange = action === 'BUY' ? -(executionPrice * quantity) : executionPrice * quantity;
     await db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [balanceChange, userId]);
+    const updatedUser = await db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId]);
+    const balanceAfter = Number(updatedUser?.balance ?? 0);
 
     logger.info(`Order #${orderId}: user=${userId} ${action} ${quantity} ${indexName} ${strikePrice} ${optionType} @${executionPrice}`);
 
-    res.json({ success: true, data: { orderId, executionPrice, quantity, action, status: 'EXECUTED', executedAt: now } });
+    res.json({
+      success: true,
+      data: { orderId, executionPrice, quantity, action, status: 'EXECUTED', executedAt: now, balanceAfter },
+    });
   } catch (error) {
     logger.error('Place order error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -271,9 +290,11 @@ export async function closePositionApi(req: Request, res: Response): Promise<voi
       [credit, userId, contract.contract_id]
     );
     await db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [credit, userId]);
+    const updatedUser = await db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId]);
+    const balanceAfter = Number(updatedUser?.balance ?? 0);
 
     logger.info(`Position closed: user=${userId} ${indexName} ${strikePrice} ${optionType} qty=${position.quantity} @${closePrice}`);
-    res.json({ success: true, data: { closePrice, quantity: position.quantity, realizedPnl: credit } });
+    res.json({ success: true, data: { closePrice, quantity: position.quantity, realizedPnl: credit, balanceAfter } });
   } catch (error) {
     logger.error('Close position error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
