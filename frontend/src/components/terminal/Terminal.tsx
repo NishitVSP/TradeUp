@@ -81,8 +81,8 @@ export function Terminal() {
       {/* Index tab pills */}
       <IndexSelection />
 
-      {/* Scrollable body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Fixed body (only order/trade book scrolls) */}
+      <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <ExpiryAndQuantityRow />
         <StrikePriceRow />
         <CheckBoxRow />

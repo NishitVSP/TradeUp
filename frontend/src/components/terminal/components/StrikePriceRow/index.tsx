@@ -6,7 +6,7 @@ import { setCeStrike, setPeStrike, stepCeStrike, stepPeStrike } from '@/store/sl
 import { TerminalRow, TerminalLabel } from '../../styled';
 import StepperInput from '../StepperInput';
 
-const StrikeColumn: React.FC<{
+const StrikeControl: React.FC<{
   side: 'CE' | 'PE';
   strike: number | null;
   ltp: number | null;
@@ -15,25 +15,14 @@ const StrikeColumn: React.FC<{
   onStep: (dir: 1 | -1) => void;
 }> = ({ side, strike, ltp, strikes, onSelect, onStep }) => {
   const isCe = side === 'CE';
-  const ltpColor  = isCe ? '#10b981' : '#ef4444';
-  const ltpBg     = isCe ? '#f0fdf4' : '#fef2f2';
-  const ltpBorder = isCe ? '#bbf7d0' : '#fecaca';
-
   return (
-    <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-      {/* Label + LTP badge */}
+    <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <TerminalLabel>{side} Strike</TerminalLabel>
-        <Typography sx={{
-          fontSize: '10px', fontWeight: 700, color: ltpColor,
-          px: '5px', py: '1px', bgcolor: ltpBg,
-          borderRadius: '4px', border: `1px solid ${ltpBorder}`,
-        }}>
-          {ltp !== null ? ltp.toFixed(2) : '—'}
+        <Typography sx={{ fontSize: '10px', fontWeight: 700, color: isCe ? '#10b981' : '#ef4444' }}>
+          {ltp !== null ? ltp.toFixed(2) : '-'}
         </Typography>
       </Box>
-
-      {/* Stepper — no typing allowed */}
       <StepperInput
         value={strike ?? (strikes[Math.floor(strikes.length / 2)] ?? '—')}
         onChange={() => { /* read-only */ }}
@@ -41,7 +30,6 @@ const StrikeColumn: React.FC<{
         allowTyping={false}
       />
 
-      {/* Dropdown for picking any added strike */}
       {strikes.length > 0 && (
         <Select
           value={strike ?? strikes[Math.floor(strikes.length / 2)]}
@@ -59,9 +47,7 @@ const StrikeColumn: React.FC<{
         <Box sx={{
           fontSize: '10px', color: '#9ca3af', px: '8px', py: '4px',
           border: '1px solid #e5e7eb', borderRadius: '6px', bgcolor: '#f9fafb', textAlign: 'center',
-        }}>
-          Add contract first
-        </Box>
+        }}>Add contract first</Box>
       )}
     </Box>
   );
@@ -77,8 +63,8 @@ const StrikePriceRow: React.FC = () => {
   const strikes = indexSelectedStrikes[activeIndexName] ?? [];
 
   return (
-    <TerminalRow sx={{ gap: '6px', alignItems: 'flex-start', py: '6px' }}>
-      <StrikeColumn
+    <TerminalRow sx={{ gap: '8px', alignItems: 'flex-start', py: '6px' }}>
+      <StrikeControl
         side="CE"
         strike={ceStrike}
         ltp={ceLtp}
@@ -87,10 +73,7 @@ const StrikePriceRow: React.FC = () => {
         onStep={(dir) => dispatch(stepCeStrike(dir))}
       />
 
-      {/* Divider */}
-      <Box sx={{ width: '1px', bgcolor: '#f0f0f0', alignSelf: 'stretch', mx: '2px', mt: '18px' }} />
-
-      <StrikeColumn
+      <StrikeControl
         side="PE"
         strike={peStrike}
         ltp={peLtp}

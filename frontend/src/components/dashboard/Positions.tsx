@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Box, Typography, TextField, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, TextField, Tooltip } from '@mui/material';
 import { Panel, PanelHeader, PanelTitle, PlaceholderText } from './styled';
 import {
   closePosition, closeAllPositions,
@@ -11,7 +11,6 @@ import {
 } from '@/store/slices/terminalSlice';
 import type { RootState } from '@/store/store';
 import type { Position } from '@/store/slices/terminalSlice';
-import { useBeepSound } from '@/hooks/useBeepSound';
 
 // ─── Small editable field used inside each position row ──────────────────────
 
@@ -24,10 +23,15 @@ const EditableField: React.FC<{
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState(value?.toString() ?? '');
 
-  const handleBlur = () => {
+  const confirm = () => {
     setEditing(false);
     const n = parseFloat(draft);
     onSave(isNaN(n) ? null : n);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setDraft(value?.toString() ?? '');
   };
 
   if (editing) {
@@ -35,8 +39,8 @@ const EditableField: React.FC<{
       <TextField
         value={draft}
         onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
-        onBlur={handleBlur}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') setEditing(false); }}
+        onBlur={cancel}
+        onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') cancel(); }}
         autoFocus
         size="small"
         variant="outlined"
@@ -73,15 +77,13 @@ const EditableField: React.FC<{
 
 // ─── Single position row ──────────────────────────────────────────────────────
 
-const PositionRow: React.FC<{ position: Position }> = ({ position: p }) => {
+const PositionRow: React.FC<{ position: Position; onClose: (p: Position) => void }> = ({ position: p, onClose }) => {
   const dispatch = useDispatch();
-  const playBeep = useBeepSound();
 
   const pnlColor = p.pnl === null ? '#6b7280' : p.pnl >= 0 ? '#10b981' : '#ef4444';
 
   const handleClose = () => {
-    playBeep();
-    dispatch(closePosition(p.id));
+    onClose(p);
   };
 
   const updateRisk = (patch: Partial<{ targetPts: number | null; slPts: number | null; trailPts: number | null; mtmTrailPts: number | null }>) => {
@@ -90,13 +92,11 @@ const PositionRow: React.FC<{ position: Position }> = ({ position: p }) => {
 
   return (
     <Box sx={{
-      p: '6px 12px', borderBottom: '1px solid #f3f4f6',
+      p: '8px 12px', borderBottom: '1px solid #f3f4f6',
       opacity: p.status === 'CLOSED' ? 0.45 : 1,
       '&:hover': { bgcolor: '#fafafa' },
     }}>
-      {/* Row 1: symbol + side + entry + PnL + close */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
-        {/* Symbol pill */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '6px' }}>
         <Box sx={{
           fontSize: '10px', fontWeight: 700, color: '#374151',
           bgcolor: '#f3f4f6', borderRadius: '4px', px: '6px', py: '1px',
@@ -108,67 +108,65 @@ const PositionRow: React.FC<{ position: Position }> = ({ position: p }) => {
           </Box>
         </Box>
 
-        {/* Side badge */}
         <Box sx={{
           fontSize: '9px', fontWeight: 700, px: '5px', py: '1px', borderRadius: '4px',
-          bgcolor: p.side === 'BUY' ? '#f0fdf4' : '#fef2f2',
-          color: p.side === 'BUY' ? '#10b981' : '#ef4444',
-          border: `1px solid ${p.side === 'BUY' ? '#bbf7d0' : '#fecaca'}`,
+          bgcolor: '#f8fafc',
+          color: '#374151',
+          border: '1px solid #e5e7eb',
         }}>
-          {p.side} · {p.lots}L
+          {p.lots}L
         </Box>
 
-        <Box sx={{ flex: 1 }} />
-
-        {/* Entry */}
-        <Typography sx={{ fontSize: '10px', color: '#6b7280' }}>
-          @{p.entryPrice.toFixed(2)}
+        <Typography sx={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>
+          BUY: ₹{(p.side === 'BUY' ? p.entryPrice : p.currentLtp ?? 0).toFixed(2)}
+        </Typography>
+        <Typography sx={{ fontSize: '10px', color: '#ef4444', fontWeight: 700 }}>
+          SELL: ₹{(p.side === 'SELL' ? p.entryPrice : p.currentLtp ?? 0).toFixed(2)}
         </Typography>
 
-        {/* PnL */}
         <Box sx={{
           fontSize: '11px', fontWeight: 800, color: pnlColor,
-          minWidth: '60px', textAlign: 'right',
+          minWidth: '68px', textAlign: 'right', ml: 'auto',
         }}>
           {p.pnl !== null ? `${p.pnl >= 0 ? '+' : ''}₹${p.pnl.toFixed(0)}` : '—'}
         </Box>
 
-        {/* Close button */}
         {p.status === 'OPEN' ? (
           <Box onClick={handleClose} sx={{
-            fontSize: '9px', fontWeight: 700, color: '#ef4444',
-            border: '1px solid #ef4444', borderRadius: '3px', px: '5px', py: '1px',
-            cursor: 'pointer', '&:hover': { bgcolor: '#fef2f2' }, ml: '4px',
+            width: '18px', height: '18px', borderRadius: '50%',
+            border: '1px solid #ef4444', color: '#ef4444',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: '12px', fontWeight: 700,
+            '&:hover': { bgcolor: '#fef2f2' }, ml: '2px',
           }}>
-            CLOSE
+            ✕
           </Box>
         ) : (
-          <Typography sx={{ fontSize: '9px', color: '#9ca3af', fontWeight: 600, ml: '4px' }}>CLOSED</Typography>
+          <Box sx={{ width: '18px' }} />
         )}
       </Box>
 
-      {/* Row 2: editable risk params */}
       {p.status === 'OPEN' && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', pl: '2px' }}>
           <Typography sx={{ fontSize: '9px', color: '#9ca3af', mr: '2px' }}>Risk:</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <Typography sx={{ fontSize: '9px', color: '#10b981' }}>TGT</Typography>
-            <EditableField label="Target pts" value={p.targetPts} color="#10b981"
+            <EditableField label="Target pts (Enter to apply)" value={p.targetPts} color="#10b981"
               onSave={(v) => updateRisk({ targetPts: v })} />
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <Typography sx={{ fontSize: '9px', color: '#ef4444' }}>SL</Typography>
-            <EditableField label="SL pts" value={p.slPts} color="#ef4444"
+            <EditableField label="SL pts (Enter to apply)" value={p.slPts} color="#ef4444"
               onSave={(v) => updateRisk({ slPts: v })} />
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <Typography sx={{ fontSize: '9px', color: '#f59e0b' }}>Trail</Typography>
-            <EditableField label="Trail pts" value={p.trailPts} color="#f59e0b"
+            <EditableField label="Trail pts (Enter to apply)" value={p.trailPts} color="#f59e0b"
               onSave={(v) => updateRisk({ trailPts: v })} />
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <Typography sx={{ fontSize: '9px', color: '#6366f1' }}>MTM</Typography>
-            <EditableField label="MTM Trail pts" value={p.mtmTrailPts} color="#6366f1"
+            <EditableField label="MTM Trail pts (Enter to apply)" value={p.mtmTrailPts} color="#6366f1"
               onSave={(v) => updateRisk({ mtmTrailPts: v })} />
           </Box>
         </Box>
@@ -271,7 +269,6 @@ const MtmProtectionBar: React.FC<{
 
 export function Positions() {
   const dispatch  = useDispatch();
-  const playBeep  = useBeepSound();
   const { positions, globalMtmTarget, globalMtmSL } = useSelector((s: RootState) => s.terminal);
   const closingRef = useRef<Set<string>>(new Set());
   const globalCloseTriggeredRef = useRef(false);
@@ -365,52 +362,26 @@ export function Positions() {
     }
   }, [openPositions, totalPnl, globalMtmTarget, globalMtmSL, dispatch]);
 
-  const handleCloseAll = () => {
-    if (openPositions.length === 0) return;
-    playBeep();
-    for (const p of openPositions) {
-      closeSinglePosition(p);
-    }
-    dispatch(closeAllPositions());
-  };
-
   return (
     <Panel sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <PanelHeader>
         <PanelTitle>Positions</PanelTitle>
-        {openPositions.length > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Box sx={{
-              px: '10px', py: '3px', borderRadius: '20px', fontWeight: 700,
-              fontSize: '0.8rem', fontFamily: '"DM Sans", sans-serif',
-              bgcolor: totalPnl >= 0 ? '#f0fdf4' : '#fef2f2',
-              color: totalPnl >= 0 ? '#10b981' : '#ef4444',
-              border: `1px solid ${totalPnl >= 0 ? '#bbf7d0' : '#fecaca'}`,
-            }}>
-              {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toFixed(0)}
-            </Box>
-            <Box
-              onClick={handleCloseAll}
-              sx={{
-                px: '8px', py: '3px', borderRadius: '4px', cursor: 'pointer',
-                bgcolor: '#fef2f2', color: '#ef4444', fontSize: '0.75rem', fontWeight: 700,
-                border: '1px solid #fecaca',
-                '&:hover': { bgcolor: '#fee2e2' },
-              }}
-            >
-              Close All
-            </Box>
-          </Box>
-        )}
+        <Box sx={{
+          px: '10px', py: '3px', borderRadius: '20px', fontWeight: 700,
+          fontSize: '0.8rem', fontFamily: '"DM Sans", sans-serif',
+          bgcolor: totalPnl >= 0 ? '#f0fdf4' : '#fef2f2',
+          color: totalPnl >= 0 ? '#10b981' : '#ef4444',
+          border: `1px solid ${totalPnl >= 0 ? '#bbf7d0' : '#fecaca'}`,
+        }}>
+          {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toFixed(0)}
+        </Box>
       </PanelHeader>
 
-      {openPositions.length > 0 && (
-        <MtmProtectionBar
-          totalPnl={totalPnl}
-          globalMtmTarget={globalMtmTarget}
-          globalMtmSL={globalMtmSL}
-        />
-      )}
+      <MtmProtectionBar
+        totalPnl={totalPnl}
+        globalMtmTarget={globalMtmTarget}
+        globalMtmSL={globalMtmSL}
+      />
 
       {positions.length === 0 ? (
         <PlaceholderText>Your active positions will appear here</PlaceholderText>
@@ -423,7 +394,7 @@ export function Positions() {
                 textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</Typography>
             ))}
           </Box>
-          {positions.map((p) => <PositionRow key={p.id} position={p} />)}
+          {positions.map((p) => <PositionRow key={p.id} position={p} onClose={closeSinglePosition} />)}
         </Box>
       )}
     </Panel>

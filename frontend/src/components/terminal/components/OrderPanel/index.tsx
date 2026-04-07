@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Input, Typography } from '@mui/joy';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
@@ -16,9 +16,10 @@ const API_BASE = 'http://localhost:3001';
 interface OrderButtonProps {
   optionType: 'CE' | 'PE';
   transactionType: 'BUY' | 'SELL';
+  onWarning: (message: string | null) => void;
 }
 
-const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }) => {
+const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType, onWarning }) => {
   const dispatch  = useDispatch();
   const playBeep  = useBeepSound();
   const t         = useSelector((s: RootState) => s.terminal);
@@ -38,7 +39,6 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
   };
 
   const strike  = optionType === 'CE' ? t.ceStrike : t.peStrike;
-  const ltp     = optionType === 'CE' ? t.ceLtp    : t.peLtp;
   const isBuy   = transactionType === 'BUY';
   const lotSize = LOT_SIZES[t.activeIndexName] ?? 1;
   const qty     = t.lots * lotSize;
@@ -46,6 +46,7 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
   const handlePlace = async () => {
     if (!strike || !t.activeExpiry) return;
     playBeep();
+    onWarning(null);
 
     const parsedLimit = limitValue !== '' ? parseFloat(limitValue) : null;
 
@@ -106,28 +107,20 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
         }
       } else {
         dispatch(updateOrderStatus({ id: optimisticId, status: 'FAILED' }));
-        console.error('Order failed:', data.message);
+        onWarning(data?.message || 'Order failed. Please add funds and try again.');
       }
     } catch (err) {
-      // Backend not reachable — fall back to local simulation using LTP
+      // Backend not reachable — fall back to local simulation
       dispatch(executeOrderLocally({
         id: optimisticId,
-        executedPrice: parsedLimit ?? ltp ?? 0,
+        executedPrice: parsedLimit ?? 0,
       }));
+      onWarning('Backend unreachable. Order simulated locally.');
     }
   };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-      {ltp !== null && (
-        <Typography sx={{
-          fontSize: '9px', color: isBuy ? '#10b981' : '#ef4444',
-          textAlign: 'center', fontWeight: 600,
-        }}>
-          LTP {ltp.toFixed(2)}
-        </Typography>
-      )}
-
       <TerminalButton
         variant={isBuy ? 'buy' : 'sell'}
         onClick={handlePlace}
@@ -154,25 +147,37 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
   );
 };
 
-const OrderPanel: React.FC = () => (
-  <Box sx={{ p: '6px 8px', borderBottom: '1px solid #f0f0f0' }}>
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', mb: '4px', px: '2px' }}>
-      {['CE', 'PE'].map((t) => (
-        <Box key={t} sx={{
-          textAlign: 'center', fontSize: '10px', fontWeight: 700,
-          color: t === 'CE' ? '#10b981' : '#ef4444', letterSpacing: '0.8px',
-        }}>{t}</Box>
-      ))}
+const OrderPanel: React.FC = () => {
+  const [warning, setWarning] = useState<string | null>(null);
+
+  return (
+    <Box sx={{ p: '6px 8px', borderBottom: '1px solid #f0f0f0' }}>
+      
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', mb: '6px' }}>
+        <OrderButton optionType="CE" transactionType="BUY" onWarning={setWarning} />
+        <OrderButton optionType="PE" transactionType="BUY" onWarning={setWarning} />
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+        <OrderButton optionType="CE" transactionType="SELL" onWarning={setWarning} />
+        <OrderButton optionType="PE" transactionType="SELL" onWarning={setWarning} />
+      </Box>
+      {warning && (
+        <Box sx={{
+          mt: '6px',
+          px: '8px',
+          py: '4px',
+          borderRadius: '6px',
+          border: '1px solid #fde68a',
+          bgcolor: '#fffbeb',
+          color: '#92400e',
+          fontSize: '10px',
+          fontWeight: 600,
+        }}>
+          {warning}
+        </Box>
+      )}
     </Box>
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', mb: '6px' }}>
-      <OrderButton optionType="CE" transactionType="BUY" />
-      <OrderButton optionType="PE" transactionType="BUY" />
-    </Box>
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-      <OrderButton optionType="CE" transactionType="SELL" />
-      <OrderButton optionType="PE" transactionType="SELL" />
-    </Box>
-  </Box>
-);
+  );
+};
 
 export default OrderPanel;

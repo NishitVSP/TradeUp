@@ -136,19 +136,17 @@ interface TerminalState {
   error: string | null;
 }
 
-const DEFAULT_ATM = 24000;
-
 const initialState: TerminalState = {
   selectedContracts: [],
   indexSelectedExpiries: {},
   indexSelectedStrikes: {},
-  atmStrikes: { NIFTY: DEFAULT_ATM },
+  atmStrikes: {},
   addedIndexes: ['NIFTY'],
 
   activeIndexName: 'NIFTY',
   activeExpiry: '',
-  ceStrike: DEFAULT_ATM,
-  peStrike: DEFAULT_ATM,
+  ceStrike: null,
+  peStrike: null,
   ceLtp: null,
   peLtp: null,
 

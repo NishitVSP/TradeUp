@@ -166,11 +166,11 @@ const TabsRow: React.FC = () => {
   const pendingCount = orders.filter((o) => o.status === 'PENDING').length;
 
   return (
-    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: '110px' }}>
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Tabs
         value={activeTab}
         onChange={(_, v) => dispatch(setActiveTab(typeof v === 'number' ? v : 0))}
-        sx={{ bgcolor: 'white', flex: 1, display: 'flex', flexDirection: 'column' }}
+        sx={{ bgcolor: 'white', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
         <TabList disableUnderline sx={{
           bgcolor: '#f8fafc', borderBottom: '1px solid #e5e7eb',
