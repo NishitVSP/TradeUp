@@ -34,8 +34,13 @@ export function OptionSelector() {
   useEffect(() => { fetchExpiriesAndSpot(); }, [selectedIndex]);
 
   const fetchExpiriesAndSpot = async () => {
+    // Only run on client-side to prevent hydration errors
+    if (typeof window === 'undefined') return;
+    
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
+      
       const [er, sr] = await Promise.all([
         fetch(`${API_BASE}/api/options/expiries/${selectedIndex}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE}/api/options/spot/${selectedIndex}`,     { headers: { Authorization: `Bearer ${token}` } }),
@@ -97,7 +102,17 @@ export function OptionSelector() {
     dispatch(clearError());
 
     try {
+      // Only run on client-side to prevent hydration errors
+      if (typeof window === 'undefined') {
+        dispatch(setError('Client-side only operation'));
+        return;
+      }
+      
       const token = localStorage.getItem('token');
+      if (!token) {
+        dispatch(setError('Authentication required'));
+        return;
+      }
 
       // 1. Tell backend to start simulating ALL contracts in range (both CE and PE)
       const watchRes = await fetch(`${API_BASE}/api/options/watch/multiple`, {

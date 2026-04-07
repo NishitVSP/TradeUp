@@ -16,6 +16,9 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
+    // Only run on client-side to prevent hydration errors
+    if (typeof window === 'undefined') return;
+    
     const token = localStorage.getItem('token');
     if (token) {
       router.push('/dashboard');

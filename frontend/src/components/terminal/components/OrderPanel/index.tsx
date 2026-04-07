@@ -71,7 +71,18 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType, 
 
     // 2. Call real API
     try {
+      // Only run on client-side to prevent hydration errors
+      if (typeof window === 'undefined') {
+        onWarning('Client-side only operation');
+        return;
+      }
+      
       const token = localStorage.getItem('token');
+      if (!token) {
+        onWarning('Authentication required');
+        return;
+      }
+      
       const res = await fetch(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: {

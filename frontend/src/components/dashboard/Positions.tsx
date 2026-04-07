@@ -278,7 +278,12 @@ export function Positions() {
 
   const closePositionOnBackend = async (p: Position) => {
     try {
+      // Only run on client-side to prevent hydration errors
+      if (typeof window === 'undefined') return;
+      
       const token = localStorage.getItem('token');
+      if (!token) return;
+      
       const res = await fetch('http://localhost:3001/api/orders/close-position', {
         method: 'POST',
         headers: {

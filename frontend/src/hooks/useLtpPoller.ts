@@ -46,7 +46,12 @@ async function fetchLtps(
   contracts: Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE' }>
 ): Promise<Array<{ key: string; ltp: number | null }>> {
   try {
+    // Only run on client-side to prevent hydration errors
+    if (typeof window === 'undefined') return [];
+    
     const token = localStorage.getItem('token');
+    if (!token) return [];
+    
     const res = await fetch(`${API_BASE}/api/orders/ltps`, {
       method: 'POST',
       headers: {

@@ -58,7 +58,12 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
     setError('');
 
     try {
+      // Only run on client-side to prevent hydration errors
+      if (typeof window === 'undefined') return;
+      
       const token = localStorage.getItem('token');
+      if (!token) return;
+      
       const response = await fetch('http://localhost:3001/api/auth/balance', {
         method: 'POST',
         headers: {

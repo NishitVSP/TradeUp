@@ -45,6 +45,9 @@ export default function DashboardPage() {
   }, []);
 
   const fetchUserProfile = async () => {
+    // Only run on client-side to prevent hydration errors
+    if (typeof window === 'undefined') return;
+    
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }
 

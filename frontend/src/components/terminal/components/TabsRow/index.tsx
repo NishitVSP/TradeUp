@@ -134,7 +134,12 @@ const TabsRow: React.FC = () => {
     setApiFetching(true);
     setApiError(null);
     try {
+      // Only run on client-side to prevent hydration errors
+      if (typeof window === 'undefined') return;
+      
       const token = localStorage.getItem('token');
+      if (!token) return;
+      
       const res = await fetch(`${API_BASE}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
