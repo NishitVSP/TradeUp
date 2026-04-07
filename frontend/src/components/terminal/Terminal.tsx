@@ -5,6 +5,7 @@ import { Box, Typography } from '@mui/joy';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
 import { closeAllPositions, cancelAllOrders } from '@/store/slices/terminalSlice';
+import { useLtpPoller } from '@/hooks/useLtpPoller';
 
 import IndexSelection       from './components/IndexSelection';
 import ExpiryAndQuantityRow from './components/ExpiryAndQuantityRow';
@@ -16,9 +17,15 @@ import CloseAllRow          from './components/CloseAllRow';
 import TabsRow              from './components/TabsRow';
 
 export function Terminal() {
-  const dispatch = useDispatch();
-  const { activeIndexName, activeExpiry } = useSelector((s: RootState) => s.terminal);
+  const dispatch  = useDispatch();
+  const { activeIndexName, activeExpiry, selectedContracts } = useSelector(
+    (s: RootState) => s.terminal
+  );
 
+  // ── Start tiered LTP polling for all watched contracts ──────────────────────
+  useLtpPoller();
+
+  // ── Global keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -54,12 +61,20 @@ export function Terminal() {
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {selectedContracts.length > 0 && (
+            <Box sx={{ fontSize: '9px', color: '#9ca3af', fontWeight: 600, mr: '4px' }}>
+              {selectedContracts.length} contracts
+            </Box>
+          )}
           <Box sx={{
-            width: 6, height: 6, borderRadius: '50%', bgcolor: '#10b981',
-            animation: 'pulse 2s infinite',
+            width: 6, height: 6, borderRadius: '50%',
+            bgcolor: selectedContracts.length > 0 ? '#10b981' : '#d1d5db',
+            animation: selectedContracts.length > 0 ? 'pulse 2s infinite' : 'none',
             '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
           }} />
-          <Typography sx={{ fontSize: '9px', color: '#9ca3af', fontWeight: 600 }}>LIVE</Typography>
+          <Typography sx={{ fontSize: '9px', color: '#9ca3af', fontWeight: 600 }}>
+            {selectedContracts.length > 0 ? 'LIVE' : 'IDLE'}
+          </Typography>
         </Box>
       </Box>
 

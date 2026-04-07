@@ -1,395 +1,366 @@
-import { open } from 'sqlite';
-import sqlite3 from 'sqlite3';
-import { blackScholes, getDaysToExpiry, daysToYears } from '../utils/blackScholes';
-import { getSpotPrice, getAllSpots } from './indexPoller';
-import { logger } from '../utils/logger';
+/**
+ * optionsSimulator.ts
+ *
+ * Manages LTP simulation for watched option contracts using Worker threads.
+ *
+ * Architecture:
+ *  ┌─────────────────────────────────────────────────┐
+ *  │  Main thread                                    │
+ *  │  • Manages watchedContracts Map                 │
+ *  │  • Broadcasts spot prices to workers (300ms)    │
+ *  │  • Receives computed LTPs from workers          │
+ *  │  • Batch-writes LTPs to SQLite (WAL, 150ms)     │
+ *  └──────┬──────────────────────────────────────────┘
+ *         │  Worker threads (worker_threads API)
+ *  ┌──────┴──────────────────────────────────────────┐
+ *  │  HOT  worker  (≤5 from ATM)   500ms             │
+ *  │  WARM worker  (6-10 from ATM) 1000ms            │
+ *  │  COLD worker  (>10 from ATM)  2000ms            │
+ *  └─────────────────────────────────────────────────┘
+ *
+ * CPU allocation (on a typical 8-core laptop):
+ *   8 - 2 = 6 available → min(6, 3) = 3 workers (one per tier)
+ *   1 CPU reserved for Node.js main thread
+ *   1 CPU reserved for OS + frontend
+ */
 
-interface OptionContract {
-  contract_id: number;
-  index_name: string;
-  strike_price: number;
-  expiry_date: string;
-  option_type: 'CE' | 'PE';
-  ltp: number;
-  last_updated: string;
-}
+import { Worker }   from 'worker_threads';
+import { cpus }     from 'os';
+import path         from 'path';
+import { open }     from 'sqlite';
+import sqlite3      from 'sqlite3';
+import { getSpotPrice, getAllSpots } from './indexPoller';
+import { logger }   from '../utils/logger';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface WatchedContract {
-  indexName: string;
-  strikePrice: number;
-  expiryDate: string;
-  optionType: 'CE' | 'PE';
-  interval: number; // 500, 1000, or 2000ms
-  lastUpdate: number;
+  indexName:    string;
+  strikePrice:  number;
+  expiryDate:   string;
+  optionType:   'CE' | 'PE';
+  tier:         Tier;
 }
 
-const STRIKE_CONFIG: Record<string, { stepSize: number; range: number }> = {
-  NIFTY: { stepSize: 50, range: 40 },
-  BANKNIFTY: { stepSize: 100, range: 40 },
-  FINNIFTY: { stepSize: 50, range: 40 },
-  MIDCPNIFTY: { stepSize: 25, range: 40 },
-  BANKEX: { stepSize: 100, range: 40 },
-  SENSEX: { stepSize: 100, range: 40 },
+interface ContractSpec {
+  key:          string;
+  indexName:    string;
+  strikePrice:  number;
+  expiryDate:   string;
+  optionType:   'CE' | 'PE';
+}
+
+type Tier = 'hot' | 'warm' | 'cold';
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const DB_PATH = './data/tradeup.db';
+
+const STEP: Record<string, number> = {
+  NIFTY: 50, BANKNIFTY: 100, FINNIFTY: 50,
+  MIDCPNIFTY: 25, BANKEX: 100, SENSEX: 100,
 };
 
-// Track watched contracts with their update intervals
+const TIER_INTERVALS: Record<Tier, number> = { hot: 500, warm: 1000, cold: 2000 };
+
+// Reserve 1 for main thread + 1 for OS/frontend; cap at 3 (one per tier)
+const NUM_WORKERS = Math.min(Math.max(1, cpus().length - 2), 3);
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
 export const watchedContracts = new Map<string, WatchedContract>();
-let simulationInterval: NodeJS.Timeout | null = null;
 
-/**
- * Calculate update interval based on distance from ATM
- */
-export function calculateUpdateInterval(
-  indexName: string,
-  strikePrice: number,
-  spotPrice: number
-): number {
-  const config = STRIKE_CONFIG[indexName];
-  if (!config) return 2000;
+const workers: Partial<Record<Tier, Worker>> = {};
 
-  const atmStrike = Math.round(spotPrice / config.stepSize) * config.stepSize;
-  const strikeDistance = Math.abs(strikePrice - atmStrike) / config.stepSize;
+// Pending LTP updates — accumulated from worker messages, batch-flushed to DB
+const pending = new Map<string, {
+  indexName: string; strikePrice: number;
+  expiryDate: string; optionType: string; ltp: number;
+}>();
 
-  // [-5, +5] strikes from ATM: 500ms
-  if (strikeDistance <= 5) {
-    return 500;
-  }
-  // [-10, +10] strikes from ATM (excluding the first 5): 1000ms
-  else if (strikeDistance <= 10) {
-    return 1000;
-  }
-  // All other contracts: 2000ms
-  else {
-    return 2000;
-  }
+let started            = false;
+let spotBroadcast:       NodeJS.Timeout | null = null;
+let dbFlushInterval:     NodeJS.Timeout | null = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeKey(c: { indexName: string; strikePrice: number; expiryDate: string; optionType: string }): string {
+  return `${c.indexName}-${c.strikePrice}-${c.expiryDate}-${c.optionType}`;
 }
 
-/**
- * Initialize options simulator with NIFTY ATM contracts by default
- */
-export async function initializeOptionsSimulator() {
-  logger.info('Initializing options simulator...');
+function getTier(indexName: string, strikePrice: number, spot: number): Tier {
+  const step = STEP[indexName] ?? 50;
+  const dist = Math.abs(strikePrice - Math.round(spot / step) * step) / step;
+  if (dist <= 5)  return 'hot';
+  if (dist <= 10) return 'warm';
+  return 'cold';
+}
 
-  // Start with NIFTY ATM contracts
-  const spots = getAllSpots();
-  const niftySpot = spots['NIFTY'];
+/** Maps a logical tier to whichever worker is actually available */
+function resolveWorker(tier: Tier): Worker | undefined {
+  if (workers[tier])   return workers[tier];
+  if (workers['hot'])  return workers['hot'];  // fallback: hot handles everything on 1-worker setup
+  return undefined;
+}
 
-  if (niftySpot) {
-    const atmStrike = Math.round(niftySpot / 50) * 50;
-    
-    // Get the nearest expiry
-    const db = await open({
-      filename: './data/tradeup.db',
-      driver: sqlite3.Database,
-    });
+function workerFile(): string {
+  const base = path.resolve(__dirname, '../workers/ltpWorker');
+  // ts-node dev: load .ts; compiled: load .js
+  if (process.env.TS_NODE_DEV || process.env.NODE_ENV !== 'production') {
+    return base + '.ts';
+  }
+  return base + '.js';
+}
 
-    const expiryResult = await db.get(
-      `SELECT DISTINCT expiry_date FROM options_contract 
-       WHERE index_name = ? 
-       ORDER BY expiry_date ASC LIMIT 1`,
-      ['NIFTY']
-    );
+// ─── DB batch flush ───────────────────────────────────────────────────────────
 
-    await db.close();
+async function flushPending(): Promise<void> {
+  if (pending.size === 0) return;
 
-    if (expiryResult) {
-      await addContractToWatch('NIFTY', atmStrike, expiryResult.expiry_date, 'CE');
-      await addContractToWatch('NIFTY', atmStrike, expiryResult.expiry_date, 'PE');
-      logger.info(`Added NIFTY ATM contracts to watch: ${atmStrike} CE and PE`);
+  const batch = Array.from(pending.values());
+  pending.clear();
+
+  let db: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    db = await open({ filename: DB_PATH, driver: sqlite3.Database });
+    await db.run('PRAGMA journal_mode = WAL');
+    await db.run('BEGIN');
+
+    for (const u of batch) {
+      await db.run(
+        `UPDATE options_contract SET ltp = ?, last_updated = CURRENT_TIMESTAMP
+         WHERE index_name = ? AND strike_price = ? AND expiry_date = ? AND option_type = ?`,
+        [u.ltp, u.indexName, u.strikePrice, u.expiryDate, u.optionType]
+      );
     }
-  }
 
-  startSimulation();
+    await db.run('COMMIT');
+    logger.debug(`DB flush: ${batch.length} LTP updates`);
+  } catch (err) {
+    try { await db?.run('ROLLBACK'); } catch {}
+    logger.error('DB flush error:', err);
+  } finally {
+    await db?.close();
+  }
 }
 
-/**
- * Add a contract to the watch list for simulation
- */
-export async function addContractToWatch(
-  indexName: string,
-  strikePrice: number,
-  expiryDate: string,
-  optionType: 'CE' | 'PE'
-): Promise<boolean> {
-  const contractKey = `${indexName}-${strikePrice}-${expiryDate}-${optionType}`;
+// ─── Worker lifecycle ─────────────────────────────────────────────────────────
 
-  if (watchedContracts.has(contractKey)) {
-    logger.debug(`Contract ${contractKey} already being watched`);
-    return true;
+function spawnWorker(tier: Tier): Worker {
+  const file = workerFile();
+
+  const initialContracts: ContractSpec[] = Array.from(watchedContracts.values())
+    .filter(c => c.tier === tier || (NUM_WORKERS === 1))
+    .map(c => ({ key: makeKey(c), ...c }));
+
+  const execArgv = file.endsWith('.ts') ? ['--require', 'ts-node/register'] : [];
+
+  const w = new Worker(file, {
+    workerData: { workerId: tier, contracts: initialContracts, interval: TIER_INTERVALS[tier] },
+    execArgv,
+  });
+
+  // Send current spot prices immediately
+  w.postMessage({ type: 'spotUpdate', spots: getAllSpots() });
+
+  // Handle messages from worker
+  w.on('message', (msg: {
+    type: string;
+    results?: Array<{ key: string; indexName: string; strikePrice: number; expiryDate: string; optionType: string; ltp: number }>;
+  }) => {
+    if (msg.type === 'ltpBatch' && msg.results) {
+      for (const r of msg.results) pending.set(r.key, r);
+    }
+  });
+
+  w.on('error', (err) => {
+    logger.error(`Worker [${tier}] error:`, err);
+    setTimeout(() => { workers[tier] = spawnWorker(tier); }, 2000);
+  });
+
+  w.on('exit', (code) => {
+    if (code !== 0) {
+      logger.warn(`Worker [${tier}] exited (code=${code}), restarting`);
+      setTimeout(() => { workers[tier] = spawnWorker(tier); }, 2000);
+    }
+  });
+
+  logger.info(`Worker [${tier}] spawned — ${initialContracts.length} contracts, ${TIER_INTERVALS[tier]}ms`);
+  return w;
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export function startSimulation(): void {
+  if (started) { logger.warn('Simulation already running'); return; }
+  started = true;
+
+  const tiers: Tier[] = NUM_WORKERS >= 3 ? ['hot', 'warm', 'cold']
+    : NUM_WORKERS === 2 ? ['hot', 'warm']
+    : ['hot'];
+
+  for (const tier of tiers) workers[tier] = spawnWorker(tier);
+
+  // Broadcast spot prices to all workers every 300ms
+  spotBroadcast = setInterval(() => {
+    const spots = getAllSpots();
+    for (const w of Object.values(workers)) w?.postMessage({ type: 'spotUpdate', spots });
+  }, 300);
+
+  // Flush LTP updates to DB every 150ms
+  dbFlushInterval = setInterval(flushPending, 150);
+
+  logger.info(`Simulation started — ${tiers.length} worker(s) on ${cpus().length}-core machine`);
+}
+
+export function stopSimulation(): void {
+  if (spotBroadcast)   { clearInterval(spotBroadcast);   spotBroadcast   = null; }
+  if (dbFlushInterval) { clearInterval(dbFlushInterval); dbFlushInterval = null; }
+  for (const [t, w] of Object.entries(workers) as [Tier, Worker][]) {
+    w.terminate(); delete workers[t];
   }
+  started = false;
+  logger.info('Simulation stopped');
+}
+
+export async function addContractToWatch(
+  indexName: string, strikePrice: number,
+  expiryDate: string, optionType: 'CE' | 'PE'
+): Promise<boolean> {
+  const key = makeKey({ indexName, strikePrice, expiryDate, optionType });
+  if (watchedContracts.has(key)) { logger.debug(`Already watching: ${key}`); return true; }
 
   try {
-    // Check if contract exists in database
-    const db = await open({
-      filename: './data/tradeup.db',
-      driver: sqlite3.Database,
-    });
-
-    const contract = await db.get(
-      `SELECT contract_id FROM options_contract 
+    const db  = await open({ filename: DB_PATH, driver: sqlite3.Database });
+    const row = await db.get(
+      `SELECT contract_id FROM options_contract
        WHERE index_name = ? AND strike_price = ? AND expiry_date = ? AND option_type = ?`,
       [indexName, strikePrice, expiryDate, optionType]
     );
-
     await db.close();
 
-    if (contract) {
-      const spotPrice = getSpotPrice(indexName);
-      const interval = spotPrice
-        ? calculateUpdateInterval(indexName, strikePrice, spotPrice)
-        : 2000;
+    if (!row) { logger.warn(`Not in DB: ${key}`); return false; }
 
-      watchedContracts.set(contractKey, {
-        indexName,
-        strikePrice,
-        expiryDate,
-        optionType,
-        interval,
-        lastUpdate: 0,
-      });
+    const spot = getSpotPrice(indexName);
+    const tier = spot ? getTier(indexName, strikePrice, spot) : 'cold';
 
-      logger.info(`Added contract to watch: ${contractKey} (interval: ${interval}ms)`);
-      return true;
-    } else {
-      logger.warn(`Contract not found in database: ${contractKey}`);
-      return false;
-    }
-  } catch (error) {
-    logger.error('Error adding contract to watch:', error);
+    watchedContracts.set(key, { indexName, strikePrice, expiryDate, optionType, tier });
+
+    const spec: ContractSpec = { key, indexName, strikePrice, expiryDate, optionType };
+    resolveWorker(tier)?.postMessage({ type: 'addContracts', contracts: [spec] });
+
+    logger.info(`Watching [${tier}]: ${key}`);
+    return true;
+  } catch (err) {
+    logger.error('addContractToWatch error:', err);
     return false;
   }
 }
 
-/**
- * Remove a contract from the watch list
- */
 export function removeContractFromWatch(
-  indexName: string,
-  strikePrice: number,
-  expiryDate: string,
-  optionType: 'CE' | 'PE'
+  indexName: string, strikePrice: number,
+  expiryDate: string, optionType: 'CE' | 'PE'
 ): void {
-  const contractKey = `${indexName}-${strikePrice}-${expiryDate}-${optionType}`;
-  watchedContracts.delete(contractKey);
-  logger.info(`Removed contract from watch: ${contractKey}`);
+  const key = makeKey({ indexName, strikePrice, expiryDate, optionType });
+  if (!watchedContracts.delete(key)) return;
+  for (const w of Object.values(workers)) w?.postMessage({ type: 'removeContract', key });
+  logger.info(`Unwatched: ${key}`);
 }
 
-/**
- * Get all currently watched contracts
- */
 export function getWatchedContracts(): string[] {
   return Array.from(watchedContracts.keys());
 }
 
-/**
- * Update intervals for all contracts when spot price changes significantly
- */
-function updateWatchedContractIntervals(): void {
-  const spots = getAllSpots();
+/** Backward compat */
+export function calculateUpdateInterval(indexName: string, strikePrice: number, spotPrice: number): number {
+  return TIER_INTERVALS[getTier(indexName, strikePrice, spotPrice)];
+}
 
-  watchedContracts.forEach((contract, key) => {
-    const spotPrice = spots[contract.indexName];
-    if (spotPrice) {
-      const newInterval = calculateUpdateInterval(
-        contract.indexName,
-        contract.strikePrice,
-        spotPrice
+export async function initializeOptionsSimulator(): Promise<void> {
+  logger.info('Initializing options simulator...');
+
+  const spot = getSpotPrice('NIFTY');
+  if (spot) {
+    const atm = Math.round(spot / 50) * 50;
+    let db: Awaited<ReturnType<typeof open>> | null = null;
+    try {
+      db = await open({ filename: DB_PATH, driver: sqlite3.Database });
+      await db.run('PRAGMA journal_mode = WAL');
+      const row = await db.get(
+        `SELECT DISTINCT expiry_date FROM options_contract
+         WHERE index_name = 'NIFTY' ORDER BY expiry_date ASC LIMIT 1`
       );
-
-      if (newInterval !== contract.interval) {
-        contract.interval = newInterval;
-        logger.debug(`Updated interval for ${key}: ${newInterval}ms`);
+      if (row) {
+        await addContractToWatch('NIFTY', atm, row.expiry_date, 'CE');
+        await addContractToWatch('NIFTY', atm, row.expiry_date, 'PE');
+        logger.info(`Default NIFTY ATM: ${atm} CE+PE (${row.expiry_date})`);
       }
+    } finally {
+      await db?.close();
     }
-  });
-}
-
-/**
- * Calculate LTP for a single contract using Black-Scholes
- */
-function calculateContractLTP(
-  spotPrice: number,
-  strikePrice: number,
-  expiryDate: string,
-  optionType: 'CE' | 'PE'
-): number {
-  const daysToExpiry = getDaysToExpiry(expiryDate);
-  const timeToExpiry = daysToYears(daysToExpiry);
-
-  const ltp = blackScholes(
-    spotPrice,
-    strikePrice,
-    timeToExpiry,
-    optionType.toLowerCase() as 'ce' | 'pe'
-  );
-
-  // Round to 2 decimal places
-  return Math.round(ltp * 100) / 100;
-}
-
-/**
- * Update LTPs for watched contracts based on their intervals
- */
-async function updateWatchedContractsLTP(): Promise<void> {
-  if (watchedContracts.size === 0) {
-    return;
   }
 
-  const now = Date.now();
-  const db = await open({
-    filename: './data/tradeup.db',
-    driver: sqlite3.Database,
-  });
-
-  try {
-    for (const [key, contract] of watchedContracts.entries()) {
-      // Check if enough time has passed since last update
-      if (now - contract.lastUpdate < contract.interval) {
-        continue;
-      }
-
-      // Get current spot price
-      const spotPrice = getSpotPrice(contract.indexName);
-      if (!spotPrice) {
-        logger.warn(`No spot price available for ${contract.indexName}`);
-        continue;
-      }
-
-      // Calculate new LTP
-      const newLTP = calculateContractLTP(
-        spotPrice,
-        contract.strikePrice,
-        contract.expiryDate,
-        contract.optionType
-      );
-
-      // Update database
-      await db.run(
-        `UPDATE options_contract 
-         SET ltp = ?, last_updated = CURRENT_TIMESTAMP 
-         WHERE index_name = ? AND strike_price = ? AND expiry_date = ? AND option_type = ?`,
-        [newLTP, contract.indexName, contract.strikePrice, contract.expiryDate, contract.optionType]
-      );
-
-      // Update last update time
-      contract.lastUpdate = now;
-
-      logger.debug(
-        `Updated ${key}: LTP = ${newLTP} (Spot: ${spotPrice}, Interval: ${contract.interval}ms)`
-      );
-    }
-  } catch (error) {
-    logger.error('Error updating contract LTPs:', error);
-  } finally {
-    await db.close();
-  }
+  startSimulation();
+  logger.info('Options simulator ready');
 }
 
-/**
- * Start the options simulation
- */
-export function startSimulation(): void {
-  if (simulationInterval) {
-    logger.warn('Options simulation already running');
-    return;
-  }
+// ─── LTP read helpers (used by orderController) ───────────────────────────────
 
-  logger.info('Starting tiered options price simulation');
-
-  // Run at 100ms frequency to check which contracts need updates
-  simulationInterval = setInterval(async () => {
-    await updateWatchedContractsLTP();
-    
-    // Update intervals every 10 seconds based on spot price changes
-    if (Date.now() % 10000 < 100) {
-      updateWatchedContractIntervals();
-    }
-  }, 100);
-}
-
-/**
- * Stop the options simulation
- */
-export function stopSimulation(): void {
-  if (simulationInterval) {
-    clearInterval(simulationInterval);
-    simulationInterval = null;
-    logger.info('Options simulation stopped');
-  } else {
-    logger.warn('Options simulation not running');
-  }
-}
-
-/**
- * Get current LTP for a specific contract
- */
 export async function getContractLTP(
   indexName: string,
   strikePrice: number,
-  optionType: 'CE' | 'PE'
+  optionType: 'CE' | 'PE',
+  expiryDate?: string
 ): Promise<number | null> {
+  // Check pending updates first (freshest value, not yet flushed)
+  for (const u of pending.values()) {
+    const expiryMatches = expiryDate ? u.expiryDate === expiryDate : true;
+    if (
+      u.indexName === indexName &&
+      u.strikePrice === strikePrice &&
+      u.optionType === optionType &&
+      expiryMatches
+    ) {
+      return u.ltp;
+    }
+  }
+  // Fall back to DB
   try {
-    const db = await open({
-      filename: './data/tradeup.db',
-      driver: sqlite3.Database,
-    });
-
-    const result = await db.get(
-      `SELECT ltp FROM options_contract 
-       WHERE index_name = ? AND strike_price = ? AND option_type = ? 
-       ORDER BY expiry_date ASC LIMIT 1`,
-      [indexName, strikePrice, optionType]
-    );
-
+    const db  = await open({ filename: DB_PATH, driver: sqlite3.Database });
+    const row = expiryDate
+      ? await db.get(
+          `SELECT ltp FROM options_contract
+           WHERE index_name = ? AND strike_price = ? AND expiry_date = ? AND option_type = ?
+           LIMIT 1`,
+          [indexName, strikePrice, expiryDate, optionType]
+        )
+      : await db.get(
+          `SELECT ltp FROM options_contract
+           WHERE index_name = ? AND strike_price = ? AND option_type = ?
+           ORDER BY expiry_date ASC LIMIT 1`,
+          [indexName, strikePrice, optionType]
+        );
     await db.close();
-
-    return result ? result.ltp : null;
-  } catch (error) {
-    logger.error('Error getting contract LTP:', error);
+    return row?.ltp ?? null;
+  } catch (err) {
+    logger.error('getContractLTP error:', err);
     return null;
   }
 }
 
-/**
- * Get multiple contract LTPs (for frontend display)
- */
 export async function getMultipleContractLTPs(
-  contracts: Array<{
-    indexName: string;
-    strikePrice: number;
-    expiryDate: string;
-    optionType: 'CE' | 'PE';
-  }>
-): Promise<
-  Array<{
-    indexName: string;
-    strikePrice: number;
-    expiryDate: string;
-    optionType: 'CE' | 'PE';
-    ltp: number | null;
-  }>
-> {
-  const db = await open({
-    filename: './data/tradeup.db',
-    driver: sqlite3.Database,
-  });
-
+  contracts: Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE' }>
+): Promise<Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE'; ltp: number | null }>> {
+  const db = await open({ filename: DB_PATH, driver: sqlite3.Database });
   const results = [];
-
-  for (const contract of contracts) {
-    const result = await db.get(
-      `SELECT ltp FROM options_contract 
+  for (const c of contracts) {
+    const row = await db.get(
+      `SELECT ltp FROM options_contract
        WHERE index_name = ? AND strike_price = ? AND expiry_date = ? AND option_type = ?`,
-      [contract.indexName, contract.strikePrice, contract.expiryDate, contract.optionType]
+      [c.indexName, c.strikePrice, c.expiryDate, c.optionType]
     );
-
-    results.push({
-      ...contract,
-      ltp: result ? result.ltp : null,
-    });
+    results.push({ ...c, ltp: row?.ltp ?? null });
   }
-
   await db.close();
-
   return results;
 }

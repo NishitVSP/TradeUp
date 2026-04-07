@@ -1,64 +1,33 @@
 import { Router } from 'express';
+import { authenticateToken } from '../middleware/auth';
 import {
   getExpiries,
   getStrikes,
   getSpotPrice,
   watchContract,
+  watchMultipleContracts,
   unwatchContract,
   getContractLTP,
   getMultipleContractLTPs,
 } from '../controllers/optionsController';
-import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
-/**
- * @route   GET /api/options/expiries/:indexName
- * @desc    Get available expiry dates for an index
- * @access  Private
- */
-router.get('/expiries/:indexName', authenticateToken, getExpiries);
+// All routes require a valid JWT
+router.use(authenticateToken);
 
-/**
- * @route   GET /api/options/strikes/:indexName
- * @desc    Get available strike prices for an index
- * @access  Private
- */
-router.get('/strikes/:indexName', authenticateToken, getStrikes);
+// ── Market data ──────────────────────────────────────────────────────────────
+router.get('/expiries/:indexName',  getExpiries);           // GET /api/options/expiries/NIFTY
+router.get('/strikes/:indexName',   getStrikes);            // GET /api/options/strikes/NIFTY
+router.get('/spot/:indexName',      getSpotPrice);          // GET /api/options/spot/NIFTY
 
-/**
- * @route   GET /api/options/spot/:indexName
- * @desc    Get current spot price for an index
- * @access  Private
- */
-router.get('/spot/:indexName', authenticateToken, getSpotPrice);
+// ── Contract simulation (LTP generation) ─────────────────────────────────────
+router.post('/watch',               watchContract);         // POST /api/options/watch
+router.post('/watch/multiple',      watchMultipleContracts);// POST /api/options/watch/multiple
+router.post('/unwatch',             unwatchContract);       // POST /api/options/unwatch
 
-/**
- * @route   POST /api/options/watch
- * @desc    Start watching an option contract
- * @access  Private
- */
-router.post('/watch', authenticateToken, watchContract);
-
-/**
- * @route   POST /api/options/unwatch
- * @desc    Stop watching an option contract
- * @access  Private
- */
-router.post('/unwatch', authenticateToken, unwatchContract);
-
-/**
- * @route   GET /api/options/ltp
- * @desc    Get LTP for a single contract
- * @access  Private
- */
-router.get('/ltp', authenticateToken, getContractLTP);
-
-/**
- * @route   POST /api/options/ltp/multiple
- * @desc    Get LTPs for multiple contracts
- * @access  Private
- */
-router.post('/ltp/multiple', authenticateToken, getMultipleContractLTPs);
+// ── LTP retrieval ─────────────────────────────────────────────────────────────
+router.get('/ltp',                  getContractLTP);        // GET  /api/options/ltp?indexName=&strikePrice=&optionType=
+router.post('/ltp/multiple',        getMultipleContractLTPs);// POST /api/options/ltp/multiple
 
 export default router;

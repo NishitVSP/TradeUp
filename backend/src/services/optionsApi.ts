@@ -89,6 +89,40 @@ export class OptionsApiService {
   }
 
   /**
+   * Watch multiple contracts (batch request for LTP generation)
+   */
+  static async watchMultipleContracts(
+    contracts: Array<{ indexName: string; strikePrice: number; expiryDate: string; optionType: 'CE' | 'PE' }>
+  ): Promise<{ success: boolean; results: Array<{ contract: any; success: boolean; message: string }>; message: string }> {
+    try {
+      const results = [];
+      
+      for (const contract of contracts) {
+        const result = await this.watchContract(
+          contract.indexName,
+          contract.strikePrice,
+          contract.expiryDate,
+          contract.optionType
+        );
+        
+        results.push({
+          contract,
+          success: result.success,
+          message: result.message
+        });
+      }
+      
+      const successCount = results.filter(r => r.success).length;
+      const message = `Successfully started watching ${successCount}/${contracts.length} contracts`;
+      
+      return { success: true, results, message };
+    } catch (error) {
+      logger.error('Error watching multiple contracts:', error);
+      return { success: false, results: [], message: 'Internal server error' };
+    }
+  }
+
+  /**
    * Get ATM strike price for a given index
    */
   static getATMStrike(indexName: string, spotPrice: number): number {
@@ -105,3 +139,5 @@ export class OptionsApiService {
     return Math.round(spotPrice / stepSize) * stepSize;
   }
 }
+
+

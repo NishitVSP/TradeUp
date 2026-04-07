@@ -392,11 +392,10 @@ const terminalSlice = createSlice({
     // ── Order placement (optimistic, session-only) ────────────────────────────
     placeOrder: (
       state,
-      action: PayloadAction<Omit<OrderEntry, 'id' | 'placedAt' | 'executedAt' | 'status' | 'executedPrice'>>
+      action: PayloadAction<Omit<OrderEntry, 'placedAt' | 'executedAt' | 'status' | 'executedPrice'>>
     ) => {
       state.orders.unshift({
         ...action.payload,
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         status: 'PENDING',
         executedPrice: null,
         placedAt: new Date().toISOString(),

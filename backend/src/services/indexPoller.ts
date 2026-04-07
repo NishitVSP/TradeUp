@@ -25,6 +25,68 @@ const MARKET_SESSIONS = [
   { name: 'SHANGHAI', start: 7, end: 9, endMinute: 15, url: 'https://query1.finance.yahoo.com/v8/finance/chart/000001.SS' }
 ];
 
+// Helper function to get Yahoo Finance URL based on IST
+function getYahooFinanceUrlByIST(): string {
+  const session = getCurrentMarketSession();
+  return session ? session.url : 'https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI';
+}
+
+// Check if market is open using Yahoo Finance API
+export async function isMarketOpen(url: string): Promise<boolean> {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            logger.warn('Fetch failed:', response.status, response.statusText);
+            return false;
+        }
+        const data = await response.json() as {
+            chart?: {
+                result?: Array<{
+                    meta?: any;
+                }>;
+            };
+        };
+        const meta = data.chart?.result?.[0]?.meta;
+        if (!meta || !meta.currentTradingPeriod || !meta.currentTradingPeriod.regular) {
+            logger.warn('Missing currentTradingPeriod.regular in meta');
+            return false;
+        }
+        const now = Math.floor(Date.now() / 1000); // current time in seconds
+        const regular = meta.currentTradingPeriod.regular;
+        // Check if now is within the regular trading period
+        return now >= regular.start && now <= regular.end;
+    } catch (err) {
+        logger.warn('Error in isMarketOpen:', err);
+        return false;
+    }
+}
+
+export async function fetchOtherExchangeLiveData(): Promise<number | null> {
+    let YAHOO_FINANCE_URL = getYahooFinanceUrlByIST();
+    const marketState = await isMarketOpen(YAHOO_FINANCE_URL);
+    if (!marketState) {
+        YAHOO_FINANCE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD'; // Default to Bitcoin if not in regular market state
+    }
+
+    try {
+        const response = await fetch(YAHOO_FINANCE_URL);
+        const data = await response.json() as {
+            chart: {
+                result: Array<{
+                    meta: {
+                        regularMarketPrice: number;
+                        regularMarketTime: number;
+                    };
+                }>;
+            };
+        };
+        const result = data.chart.result[0];
+        return result.meta.regularMarketPrice;
+    } catch {
+        return null;
+    }
+}
+
 // Helper to check if current time is within market session
 function getCurrentMarketSession(): typeof MARKET_SESSIONS[0] | null {
   const now = new Date();

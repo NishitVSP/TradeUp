@@ -5,11 +5,13 @@ import { RootState } from '@/store/store';
 import {
   setCeBuyLimit, setCeSellLimit,
   setPeBuyLimit, setPeSellLimit,
-  placeOrder,
+  placeOrder, executeOrderLocally,
   LOT_SIZES,
 } from '@/store/slices/terminalSlice';
 import { TerminalButton } from '../../styled';
 import { useBeepSound } from '@/hooks/useBeepSound';
+
+const API_BASE = 'http://localhost:3001';
 
 interface OrderButtonProps {
   optionType: 'CE' | 'PE';
@@ -17,9 +19,9 @@ interface OrderButtonProps {
 }
 
 const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }) => {
-  const dispatch = useDispatch();
-  const playBeep = useBeepSound();
-  const t = useSelector((s: RootState) => s.terminal);
+  const dispatch  = useDispatch();
+  const playBeep  = useBeepSound();
+  const t         = useSelector((s: RootState) => s.terminal);
 
   const limitValue =
     optionType === 'CE' && transactionType === 'BUY'  ? t.ceBuyLimit  :
@@ -41,11 +43,16 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
   const lotSize = LOT_SIZES[t.activeIndexName] ?? 1;
   const qty     = t.lots * lotSize;
 
-  const handlePlace = () => {
-    if (!strike) return;
+  const handlePlace = async () => {
+    if (!strike || !t.activeExpiry) return;
     playBeep();
+
     const parsedLimit = limitValue !== '' ? parseFloat(limitValue) : null;
+
+    // 1. Optimistically add to Redux order book immediately
+    const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     dispatch(placeOrder({
+      id: optimisticId,
       indexName:      t.activeIndexName,
       strikePrice:    strike,
       expiryDate:     t.activeExpiry,
@@ -56,10 +63,56 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
       lotSize,
       orderType:      parsedLimit !== null ? 'LIMIT' : 'MARKET',
       limitPrice:     parsedLimit,
-      targetPts:  t.pdTarget !== '' ? parseFloat(t.pdTarget) : null,
-      slPts:      t.pdSL    !== '' ? parseFloat(t.pdSL)    : null,
-      trailPts:   t.pdTrail !== '' ? parseFloat(t.pdTrail) : null,
+      targetPts:      t.pdTarget !== '' ? parseFloat(t.pdTarget) : null,
+      slPts:          t.pdSL     !== '' ? parseFloat(t.pdSL)     : null,
+      trailPts:       t.pdTrail  !== '' ? parseFloat(t.pdTrail)  : null,
     }));
+
+    // 2. Call real API
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          indexName:   t.activeIndexName,
+          strikePrice: strike,
+          expiryDate:  t.activeExpiry,
+          optionType,
+          action:      transactionType,
+          orderType:   parsedLimit !== null ? 'LMT' : 'MKT',
+          lots:        t.lots,
+          lotSize,
+          limitPrice:  parsedLimit,
+          targetPts:   t.pdTarget !== '' ? parseFloat(t.pdTarget) : null,
+          slPts:       t.pdSL     !== '' ? parseFloat(t.pdSL)     : null,
+          trailPts:    t.pdTrail  !== '' ? parseFloat(t.pdTrail)  : null,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // 3. Mark optimistic order as executed with real price
+        dispatch(executeOrderLocally({
+          id: optimisticId,
+          executedPrice: data.data.executionPrice,
+        }));
+      } else {
+        // Mark as failed
+        dispatch(executeOrderLocally({ id: optimisticId, executedPrice: ltp ?? 0 }));
+        console.error('Order failed:', data.message);
+      }
+    } catch (err) {
+      // Backend not reachable — fall back to local simulation using LTP
+      dispatch(executeOrderLocally({
+        id: optimisticId,
+        executedPrice: parsedLimit ?? ltp ?? 0,
+      }));
+    }
   };
 
   return (
@@ -67,11 +120,12 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
       {ltp !== null && (
         <Typography sx={{
           fontSize: '9px', color: isBuy ? '#10b981' : '#ef4444',
-          textAlign: 'center', fontWeight: 600
+          textAlign: 'center', fontWeight: 600,
         }}>
           LTP {ltp.toFixed(2)}
         </Typography>
       )}
+
       <TerminalButton
         variant={isBuy ? 'buy' : 'sell'}
         onClick={handlePlace}
@@ -80,6 +134,7 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
         <span style={{ fontSize: '11px', fontWeight: 700 }}>{optionType} {transactionType}</span>
         <span style={{ fontSize: '9px', opacity: 0.8 }}>{t.lots}L · {qty} qty</span>
       </TerminalButton>
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
         <Typography sx={{ fontSize: '10px', color: '#9ca3af', whiteSpace: 'nowrap' }}>Lmt</Typography>
         <Input
@@ -87,8 +142,10 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType }
           onChange={(e) => setLimit(e.target.value)}
           placeholder="MKT"
           size="sm"
-          sx={{ flex: 1, fontSize: '11px', '--Input-minHeight': '22px',
-            '& input': { padding: '2px 5px' } }}
+          sx={{
+            flex: 1, fontSize: '11px', '--Input-minHeight': '22px',
+            '& input': { padding: '2px 5px' },
+          }}
         />
       </Box>
     </Box>
@@ -101,7 +158,7 @@ const OrderPanel: React.FC = () => (
       {['CE', 'PE'].map((t) => (
         <Box key={t} sx={{
           textAlign: 'center', fontSize: '10px', fontWeight: 700,
-          color: t === 'CE' ? '#10b981' : '#ef4444', letterSpacing: '0.8px'
+          color: t === 'CE' ? '#10b981' : '#ef4444', letterSpacing: '0.8px',
         }}>{t}</Box>
       ))}
     </Box>
