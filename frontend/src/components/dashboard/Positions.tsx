@@ -184,6 +184,14 @@ const MtmProtectionBar: React.FC<{
 }> = ({ totalPnl, globalMtmTarget, globalMtmSL }) => {
   const dispatch = useDispatch();
 
+  const handleTargetSave = (value: number | null) => {
+    dispatch(setGlobalMtmTarget(value?.toString() ?? ''));
+  };
+
+  const handleSLSave = (value: number | null) => {
+    dispatch(setGlobalMtmSL(value?.toString() ?? ''));
+  };
+
   return (
     <Box sx={{
       px: '12px', py: '8px', bgcolor: '#f8fafc',
@@ -203,50 +211,24 @@ const MtmProtectionBar: React.FC<{
         </Typography>
       </Box>
 
-      {/* MTM Target + SL inputs */}
-      <Box sx={{ display: 'flex', gap: '8px' }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontSize: '9px', fontWeight: 600, color: '#10b981', mb: '2px',
-            textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-            MTM Target (₹)
-          </Typography>
-          <TextField
-            value={globalMtmTarget}
-            onChange={(e) => dispatch(setGlobalMtmTarget(e.target.value.replace(/[^0-9.]/g, '')))}
-            placeholder="e.g. 5000"
-            size="small"
-            variant="outlined"
-            sx={{
-              width: '100%',
-              '& .MuiInputBase-input': { fontSize: '11px', padding: '4px 8px' },
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#bbf7d0' },
-                '&:hover fieldset': { borderColor: '#10b981' },
-                '&.Mui-focused fieldset': { borderColor: '#10b981' },
-              },
-            }}
+      {/* MTM Target + SL inputs using EditableField */}
+      <Box sx={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px', flex: 1 }}>
+          <Typography sx={{ fontSize: '9px', color: '#10b981', fontWeight: 600 }}>TARGET</Typography>
+          <EditableField 
+            label="MTM Target (Enter to apply)" 
+            value={globalMtmTarget ? parseFloat(globalMtmTarget) : null} 
+            color="#10b981"
+            onSave={handleTargetSave} 
           />
         </Box>
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontSize: '9px', fontWeight: 600, color: '#ef4444', mb: '2px',
-            textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-            MTM Stop Loss (₹)
-          </Typography>
-          <TextField
-            value={globalMtmSL}
-            onChange={(e) => dispatch(setGlobalMtmSL(e.target.value.replace(/[^0-9.]/g, '')))}
-            placeholder="e.g. 2000"
-            size="small"
-            variant="outlined"
-            sx={{
-              width: '100%',
-              '& .MuiInputBase-input': { fontSize: '11px', padding: '4px 8px' },
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#fecaca' },
-                '&:hover fieldset': { borderColor: '#ef4444' },
-                '&.Mui-focused fieldset': { borderColor: '#ef4444' },
-              },
-            }}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px', flex: 1 }}>
+          <Typography sx={{ fontSize: '9px', color: '#ef4444', fontWeight: 600 }}>STOP LOSS</Typography>
+          <EditableField 
+            label="MTM Stop Loss (Enter to apply)" 
+            value={globalMtmSL ? parseFloat(globalMtmSL) : null} 
+            color="#ef4444"
+            onSave={handleSLSave} 
           />
         </Box>
       </Box>
@@ -344,7 +326,7 @@ export function Positions() {
         closeSinglePosition(p);
       }
     }
-  }, [openPositions]);
+  }, [openPositions, openPositions.map(p => p.currentLtp).join(',')]); // Trigger on LTP changes
 
   // Auto-enforce global MTM target / SL by closing all open positions
   useEffect(() => {
@@ -371,7 +353,7 @@ export function Positions() {
     <Panel sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <PanelHeader>
         <PanelTitle>Positions</PanelTitle>
-        <Box sx={{
+        {/* <Box sx={{
           px: '10px', py: '3px', borderRadius: '20px', fontWeight: 700,
           fontSize: '0.8rem', fontFamily: '"DM Sans", sans-serif',
           bgcolor: totalPnl >= 0 ? '#f0fdf4' : '#fef2f2',
@@ -379,7 +361,7 @@ export function Positions() {
           border: `1px solid ${totalPnl >= 0 ? '#bbf7d0' : '#fecaca'}`,
         }}>
           {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toFixed(0)}
-        </Box>
+        </Box> */}
       </PanelHeader>
 
       <MtmProtectionBar
@@ -392,13 +374,13 @@ export function Positions() {
         <PlaceholderText>Your active positions will appear here</PlaceholderText>
       ) : (
         <Box sx={{ overflow: 'auto', flex: 1 }}>
-          <Box sx={{ px: '12px', py: '4px', bgcolor: '#f8fafc', borderBottom: '1px solid #e5e7eb',
+          {/* <Box sx={{ px: '12px', py: '4px', bgcolor: '#f8fafc', borderBottom: '1px solid #e5e7eb',
             display: 'flex', gap: '6px' }}>
             {['Symbol', 'Side', 'Entry @', 'P&L', 'Risk params'].map((h) => (
               <Typography key={h} sx={{ fontSize: '9px', fontWeight: 700, color: '#9ca3af',
                 textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</Typography>
             ))}
-          </Box>
+          </Box> */}
           {positions.map((p) => <PositionRow key={p.id} position={p} onClose={closeSinglePosition} />)}
         </Box>
       )}

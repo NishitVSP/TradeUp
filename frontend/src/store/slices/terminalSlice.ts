@@ -250,6 +250,20 @@ const terminalSlice = createSlice({
           state.peLtp = firstContract.ltp;
         }
       }
+
+      // Also set LTP for both CE and PE contracts if they exist
+      const ceContract = contracts.find(c => c.optionType === 'CE');
+      const peContract = contracts.find(c => c.optionType === 'PE');
+      
+      if (ceContract) {
+        state.ceStrike = ceContract.strikePrice;
+        state.ceLtp = ceContract.ltp;
+      }
+      
+      if (peContract) {
+        state.peStrike = peContract.strikePrice;
+        state.peLtp = peContract.ltp;
+      }
     },
 
     removeFromTerminal: (state, action: PayloadAction<string>) => {
@@ -460,6 +474,16 @@ const terminalSlice = createSlice({
       }
     },
 
+    updateOrderLimitPrice: (
+      state,
+      action: PayloadAction<{ id: string; limitPrice: number }>
+    ) => {
+      const order = state.orders.find((o) => o.id === action.payload.id);
+      if (order && order.status === 'PENDING' && order.orderType === 'LIMIT') {
+        order.limitPrice = action.payload.limitPrice;
+      }
+    },
+
     updatePositionRiskParams: (
       state,
       action: PayloadAction<{
@@ -512,7 +536,7 @@ export const {
   setGlobalMtmTarget, setGlobalMtmSL,
   setLimitOnLtp, setSlLimitProtection,
   setActiveTab,
-  placeOrder, executeOrderLocally, updateOrderStatus,
+  placeOrder, executeOrderLocally, updateOrderStatus, updateOrderLimitPrice,
   updatePositionRiskParams,
   cancelOrder, closePosition, closeAllPositions, cancelAllOrders,
   setLoading, setError,

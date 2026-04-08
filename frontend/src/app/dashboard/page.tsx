@@ -80,7 +80,8 @@ export default function DashboardPage() {
     if (user) setUser({ ...user, balance: newBalance });
   };
 
-  if (loading) {
+  // Prevent hydration mismatch by only showing loading on client-side
+  if (typeof window !== 'undefined' && loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
 import { closeAllPositions, cancelAllOrders } from '@/store/slices/terminalSlice';
 import { useLtpPoller } from '@/hooks/useLtpPoller';
+import { useLimitOrderMonitor } from '@/hooks/useLimitOrderMonitor';
 
 import IndexSelection       from './components/IndexSelection';
 import ExpiryAndQuantityRow from './components/ExpiryAndQuantityRow';
@@ -24,6 +25,9 @@ export function Terminal() {
 
   // ── Start tiered LTP polling for all watched contracts ──────────────────────
   useLtpPoller();
+
+  // Monitor and execute limit orders when price crosses limit
+  useLimitOrderMonitor();
 
   // ── Global keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {

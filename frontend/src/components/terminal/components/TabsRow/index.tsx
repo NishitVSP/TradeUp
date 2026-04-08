@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Tabs, TabList, Tab, Typography } from '@mui/joy';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, Tabs, TabList, Tab, Typography, Input } from '@mui/joy';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
-import { setActiveTab, cancelOrder, OrderEntry, ApiOrderRow } from '@/store/slices/terminalSlice';
+import { setActiveTab, cancelOrder, updateOrderLimitPrice, OrderEntry, ApiOrderRow } from '@/store/slices/terminalSlice';
 import { useBeepSound } from '@/hooks/useBeepSound';
 
 const API_BASE = 'http://localhost:3001';
@@ -13,42 +13,66 @@ const statusColor = (s: string) =>
 // ─── Column layout constants ──────────────────────────────────────────────────
 const ORDER_COLS = '1.3fr 0.5fr 0.5fr 0.7fr 0.45fr 0.8fr';
 
-// ─── Order Book row (from backend DB) ────────────────────────────────────────
-const ApiOrderRow_: React.FC<{ order: ApiOrderRow }> = ({ order }) => (
-  <Box sx={{
-    display: 'grid', gridTemplateColumns: ORDER_COLS,
-    alignItems: 'center', px: '8px', py: '5px',
-    borderBottom: '1px solid #f9f9f9', '&:hover': { bgcolor: '#fafafa' },
-  }}>
-    <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#374151' }}>
-      {order.index_name} {order.strike_price}
-    </Typography>
-    <Typography sx={{ fontSize: '10px', fontWeight: 700,
-      color: order.option_type === 'CE' ? '#10b981' : '#ef4444' }}>
-      {order.option_type}
-    </Typography>
-    <Typography sx={{ fontSize: '10px', fontWeight: 700,
-      color: order.action === 'BUY' ? '#10b981' : '#ef4444' }}>
-      {order.action}
-    </Typography>
-    <Typography sx={{ fontSize: '10px', color: '#374151' }}>
-      {order.execution_price !== null ? order.execution_price.toFixed(2)
-        : order.limit_price   !== null ? `L:${order.limit_price.toFixed(2)}` : 'MKT'}
-    </Typography>
-    <Typography sx={{ fontSize: '10px', color: '#374151' }}>{order.quantity}</Typography>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-      <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor(order.status), flexShrink: 0 }} />
-      <Typography sx={{ fontSize: '9px', color: statusColor(order.status), fontWeight: 600 }}>
-        {order.status}
+// ─── Order Book row (from backend DB) ────────────────────────────────────────// Order Book row (from backend DB) - only shows executed trades
+const ApiOrderRow_: React.FC<{ order: ApiOrderRow }> = ({ order }) => {
+  return (
+    <Box sx={{
+      display: 'grid', gridTemplateColumns: ORDER_COLS,
+      alignItems: 'center', px: '8px', py: '5px',
+      borderBottom: '1px solid #f9f9f9', '&:hover': { bgcolor: '#fafafa' },
+    }}>
+      <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#374151' }}>
+        {order.index_name} {order.strike_price}
       </Typography>
+      <Typography sx={{ fontSize: '10px', fontWeight: 700,
+        color: order.option_type === 'CE' ? '#10b981' : '#ef4444' }}>
+        {order.option_type}
+      </Typography>
+      <Typography sx={{ fontSize: '10px', fontWeight: 700,
+        color: order.action === 'BUY' ? '#10b981' : '#ef4444' }}>
+        {order.action}
+      </Typography>
+      <Typography sx={{ fontSize: '10px', color: '#374151' }}>
+        {order.execution_price !== null ? order.execution_price.toFixed(2) : 'N/A'}
+      </Typography>
+      <Typography sx={{ fontSize: '10px', color: '#374151' }}>{order.quantity}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+        <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor(order.status), flexShrink: 0 }} />
+        <Typography sx={{ fontSize: '9px', color: statusColor(order.status), fontWeight: 600 }}>
+          {order.status}
+        </Typography>
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 // ─── Trade Book row (from Redux session) ─────────────────────────────────────
 const SessionOrderRow: React.FC<{ order: OrderEntry }> = ({ order }) => {
   const dispatch = useDispatch();
   const playBeep = useBeepSound();
+  const [editingLimit, setEditingLimit] = useState(false);
+  const [limitValue, setLimitValue] = useState('');
+
+  const handleLimitEdit = () => {
+    if (order.status === 'PENDING' && order.limitPrice !== null) {
+      setEditingLimit(true);
+      setLimitValue(order.limitPrice.toString());
+    }
+  };
+
+  const handleLimitSave = () => {
+    const newLimit = parseFloat(limitValue);
+    if (!isNaN(newLimit) && newLimit > 0) {
+      // Update the order's limit price in Redux
+      dispatch(updateOrderLimitPrice({ id: order.id, limitPrice: newLimit }));
+    }
+    setEditingLimit(false);
+  };
+
+  const handleLimitCancel = () => {
+    setEditingLimit(false);
+    setLimitValue('');
+  };
 
   return (
     <Box sx={{
@@ -67,10 +91,48 @@ const SessionOrderRow: React.FC<{ order: OrderEntry }> = ({ order }) => {
         color: order.transactionType === 'BUY' ? '#10b981' : '#ef4444' }}>
         {order.transactionType}
       </Typography>
-      <Typography sx={{ fontSize: '10px', color: '#374151' }}>
-        {order.executedPrice !== null ? order.executedPrice.toFixed(2)
-          : order.limitPrice !== null ? `L:${order.limitPrice.toFixed(2)}` : 'MKT'}
-      </Typography>
+      <Box>
+        {order.status === 'PENDING' && order.limitPrice !== null ? (
+          editingLimit ? (
+            <Input
+              value={limitValue}
+              onChange={(e) => setLimitValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleLimitSave();
+                } else if (e.key === 'Escape') {
+                  handleLimitCancel();
+                }
+              }}
+              onBlur={handleLimitSave}
+              size="sm"
+              sx={{
+                fontSize: '10px',
+                '--Input-minHeight': '20px',
+                '& input': { padding: '2px 4px', textAlign: 'right' },
+              }}
+              autoFocus
+            />
+          ) : (
+            <Box 
+              onClick={handleLimitEdit}
+              sx={{ 
+                fontSize: '10px', 
+                color: '#374151',
+                cursor: 'pointer',
+                '&:hover': { color: '#10b981', textDecoration: 'underline' }
+              }}
+            >
+              L:{order.limitPrice.toFixed(2)}
+            </Box>
+          )
+        ) : (
+          <Typography sx={{ fontSize: '10px', color: '#374151' }}>
+            {order.executedPrice !== null ? order.executedPrice.toFixed(2)
+              : order.limitPrice !== null ? `L:${order.limitPrice.toFixed(2)}` : 'MKT'}
+          </Typography>
+        )}
+      </Box>
       <Typography sx={{ fontSize: '10px', color: '#374151' }}>{order.lots}L</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
         <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor(order.status), flexShrink: 0 }} />
@@ -146,7 +208,8 @@ const TabsRow: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success) {
-        setApiOrders(data.data ?? []);
+        // Only show executed orders in Order Book (trade history)
+        setApiOrders((data.data ?? []).filter((order: ApiOrderRow) => order.status === 'EXECUTED'));
       } else {
         setApiError(data.message ?? 'Failed to load orders');
       }
@@ -163,9 +226,9 @@ const TabsRow: React.FC = () => {
     if (activeTab === 0) fetchOrderHistory();
   }, [activeTab]);
 
-  // Trade book = this session's Redux orders
+  // Trade book = this session's Redux orders (including pending limit orders)
   const sessionTrades = orders.filter((o) =>
-    ['EXECUTED', 'CANCELLED', 'FAILED'].includes(o.status)
+    ['EXECUTED', 'CANCELLED', 'FAILED', 'PENDING'].includes(o.status)
   );
 
   const pendingCount = orders.filter((o) => o.status === 'PENDING').length;
@@ -186,19 +249,6 @@ const TabsRow: React.FC = () => {
             '&.Mui-selected': { bgcolor: 'white', color: '#10b981', borderBottom: '2px solid #10b981' },
           },
         }}>
-          {/* Order Book — from backend DB */}
-          <Tab value={0}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              Order Book
-              {apiOrders.filter(o => o.status === 'PENDING').length > 0 && (
-                <Box sx={{ bgcolor: '#f59e0b', color: 'white', borderRadius: '50%',
-                  minWidth: '14px', height: '14px', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '8px', fontWeight: 700 }}>
-                  {apiOrders.filter(o => o.status === 'PENDING').length}
-                </Box>
-              )}
-            </Box>
-          </Tab>
 
           {/* Trade Book — from Redux session */}
           <Tab value={1}>
@@ -213,6 +263,15 @@ const TabsRow: React.FC = () => {
               )}
             </Box>
           </Tab>
+          
+          {/* Order Book - from backend DB (executed trades only) */}
+          <Tab value={0}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              Order Book
+            </Box>
+          </Tab>
+
+          
           
             <Box sx={{ display: 'flex', justifyContent: 'right',
               borderBottom: '1px solid #f3f4f6', pr: '4px' }}>

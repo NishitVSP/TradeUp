@@ -49,18 +49,37 @@ export async function placeOrder(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    let executionPrice: number;
+    // Handle limit orders vs market orders
     if (orderType === 'LMT' && limitPrice) {
-      executionPrice = parseFloat(limitPrice);
-    } else {
-      const liveLtp  = await getContractLTP(
-        indexName,
-        Number(strikePrice),
-        optionType as 'CE' | 'PE',
-        expiryDate
+      // Limit order: keep as PENDING, don't execute immediately
+      const now = new Date().toISOString();
+      const orderResult = await db.run(
+        `INSERT INTO orders (user_id, contract_id, order_type, action, quantity, limit_price, status, placed_at, executed_at, execution_price)
+         VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, NULL, NULL)`,
+        [userId, contract.contract_id, orderType, action, quantity, limitPrice, now]
       );
-      executionPrice = liveLtp ?? contract.ltp ?? 0;
+      
+      const orderId = orderResult.lastID;
+      
+      res.json({
+        success: true,
+        data: {
+          order_id: orderId,
+          status: 'PENDING',
+          message: 'Limit order placed. Will execute when price crosses limit.'
+        }
+      });
+      return;
     }
+
+    // Market order: execute immediately
+    const liveLtp  = await getContractLTP(
+      indexName,
+      Number(strikePrice),
+      optionType as 'CE' | 'PE',
+      expiryDate
+    );
+    const executionPrice = liveLtp ?? contract.ltp ?? 0;
 
     if (!executionPrice || executionPrice <= 0) {
       res.status(400).json({ success: false, message: 'LTP not available yet. Try again shortly.' });
@@ -75,7 +94,7 @@ export async function placeOrder(req: Request, res: Response): Promise<void> {
       if (required > currentBalance) {
         res.status(400).json({
           success: false,
-          message: `Insufficient balance. Required ₹${required.toFixed(2)}, available ₹${currentBalance.toFixed(2)}.`,
+          message: `Insufficient balance. Required ${required.toFixed(2)}, available ${currentBalance.toFixed(2)}.`,
         });
         return;
       }

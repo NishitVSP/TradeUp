@@ -108,25 +108,35 @@ const OrderButton: React.FC<OrderButtonProps> = ({ optionType, transactionType, 
       const data = await res.json();
 
       if (data.success) {
-        // 3. Mark optimistic order as executed with real price
-        dispatch(executeOrderLocally({
-          id: optimisticId,
-          executedPrice: data.data.executionPrice,
-        }));
-        if (typeof window !== 'undefined' && typeof data.data?.balanceAfter === 'number') {
-          window.dispatchEvent(new CustomEvent('tradeup:balance-updated', { detail: { balance: data.data.balanceAfter } }));
+        if (parsedLimit !== null) {
+          
+        } else {
+          // Market order executed immediately
+          dispatch(executeOrderLocally({
+            id: optimisticId,
+            executedPrice: data.data.executionPrice,
+          }));
+          if (typeof window !== 'undefined' && typeof data.data?.balanceAfter === 'number') {
+            window.dispatchEvent(new CustomEvent('tradeup:balance-updated', { detail: { balance: data.data.balanceAfter } }));
+          }
         }
       } else {
         dispatch(updateOrderStatus({ id: optimisticId, status: 'FAILED' }));
         onWarning(data?.message || 'Order failed. Please add funds and try again.');
       }
     } catch (err) {
-      // Backend not reachable — fall back to local simulation
-      dispatch(executeOrderLocally({
-        id: optimisticId,
-        executedPrice: parsedLimit ?? 0,
-      }));
-      onWarning('Backend unreachable. Order simulated locally.');
+      // Backend not reachable - for limit orders, keep as PENDING and let monitor handle execution
+      if (parsedLimit !== null) {
+        // Limit order: keep as PENDING, let useLimitOrderMonitor handle execution
+        onWarning('Backend unreachable. Limit order will execute when price crosses limit.');
+      } else {
+        // Market order: execute immediately
+        dispatch(executeOrderLocally({
+          id: optimisticId,
+          executedPrice: 0, // Market order fallback
+        }));
+        onWarning('Backend unreachable. Market order simulated locally.');
+      }
     }
   };
 
