@@ -1,10 +1,42 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Box, Button } from '@mui/material';
 
 export function HomeNavbar() {
+  const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
+  const [isTokenValid, setIsTokenValid] = useState<boolean>(false);
+
+  useEffect(() => {
+      // Check for token and validate it
+      const storedToken = localStorage.getItem('token');
+      setToken(storedToken);
+      
+      if (storedToken) {
+        // Simple token validation - check if it's not expired
+        try {
+          const tokenData = JSON.parse(atob(storedToken.split('.')[1]));
+          const currentTime = Date.now() / 1000;
+          const isExpired = tokenData.exp < currentTime;
+          setIsTokenValid(!isExpired);
+        } catch (error) {
+          setIsTokenValid(false);
+        }
+      }
+    }, []);
+  
+    const handleSignInClick = () => {
+      if (token && isTokenValid) {
+        router.push('/dashboard');
+      } else {
+        router.push('/login');
+      }
+    };
+
   return (
     <Box
       component="nav"
@@ -13,7 +45,6 @@ export function HomeNavbar() {
         alignItems: 'center',
         justifyContent: 'space-between',
         pt: 2,
-        borderBottom: '1px solid #f3f4f6',
         mb: 0,
       }}
     >
@@ -33,30 +64,11 @@ export function HomeNavbar() {
         />
       </Box>
 
-      {/* Nav links */}
-      <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 4, alignItems: 'center' }}>
-        {['Features', 'Indexes', 'About'].map((item) => (
-          <Box
-            key={item}
-            sx={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: '0.875rem',
-              color: '#6b7280',
-              cursor: 'pointer',
-              transition: 'color 0.15s',
-              '&:hover': { color: '#0a0a0a' },
-            }}
-          >
-            {item}
-          </Box>
-        ))}
-      </Box>
 
       {/* Auth buttons */}
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
         <Button
-          component={Link}
-          href="/login"
+        onClick={handleSignInClick}
           sx={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,

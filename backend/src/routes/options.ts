@@ -9,14 +9,16 @@ import {
   unwatchContract,
   getContractLTP,
   getMultipleContractLTPs,
+  getCurrentMarketSession,
 } from '../controllers/optionsController';
 
 const router = Router();
 
+router.get('/market-session',       getCurrentMarketSession); // GET /api/options/market-session
+
 // All routes require a valid JWT
 router.use(authenticateToken);
-
-// ── Market data ──────────────────────────────────────────────────────────────
+// Market data (no auth required for public market information)
 router.get('/expiries/:indexName',  getExpiries);           // GET /api/options/expiries/NIFTY
 router.get('/strikes/:indexName',   getStrikes);            // GET /api/options/strikes/NIFTY
 router.get('/spot/:indexName',      getSpotPrice);          // GET /api/options/spot/NIFTY

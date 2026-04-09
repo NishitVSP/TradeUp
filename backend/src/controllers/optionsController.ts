@@ -212,3 +212,19 @@ export async function getMultipleContractLTPs(req: Request, res: Response): Prom
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 }
+
+/**
+ * GET /api/options/market-session
+ * Returns current market session information.
+ */
+export async function getCurrentMarketSession(req: Request, res: Response): Promise<void> {
+  try {
+    logger.info('Market session endpoint hit - no auth required');
+    const result = await OptionsApiService.getCurrentMarketSession();
+    logger.info('Market session result:', result);
+    res.json(result);
+  } catch (error) {
+    logger.error('Get market session error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}

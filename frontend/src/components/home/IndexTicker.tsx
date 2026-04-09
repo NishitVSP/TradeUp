@@ -1,17 +1,64 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 
-const SUPPORTED_INDEXES = [
-  { name: 'NIFTY 50', change: '+0.42%', positive: true },
-  { name: 'BANKNIFTY', change: '+0.18%', positive: true },
-  { name: 'FINNIFTY', change: '-0.07%', positive: false },
-  { name: 'MIDCPNIFTY', change: '+0.63%', positive: true },
-  { name: 'BANKEX', change: '+0.29%', positive: true },
-  { name: 'SENSEX', change: '+0.51%', positive: true },
+// Gaussian random number generator (Box-Muller transform)
+function gaussianRandom(mean: number, stdDev: number): number {
+  let u = 0, v = 0;
+  while(u === 0) u = Math.random(); // Convert [0,1) to (0,1)
+  while(v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v) * stdDev + mean;
+}
+
+const INDEX_NAMES = [
+  'NIFTY 50',
+  'BANKNIFTY', 
+  'FINNIFTY',
+  'MIDCPNIFTY',
+  'BANKEX',
+  'SENSEX'
 ];
 
 export function IndexTicker() {
+  const [indexes, setIndexes] = useState(INDEX_NAMES.map(name => ({
+    name,
+    change: 0,
+    positive: true
+  })));
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    // Generate initial values with Gaussian distribution
+    const generateIndexData = () => {
+      return INDEX_NAMES.map(name => {
+        // Generate change with mean around 0.3% and std dev of 0.4%
+        const change = gaussianRandom(0.3, 0.4);
+        return {
+          name,
+          change: parseFloat(change.toFixed(2)),
+          positive: change >= 0
+        };
+      });
+    };
+
+    // Set initial values
+    setIndexes(generateIndexData());
+
+    // Update every 1 second for visible movement
+    const interval = setInterval(() => {
+      setIndexes(generateIndexData());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isClient]);
+
   return (
     <Box sx={{ mb: 14 }}>
       <Typography
@@ -35,7 +82,7 @@ export function IndexTicker() {
           gap: 2,
         }}
       >
-        {SUPPORTED_INDEXES.map((index) => (
+        {indexes.map((index) => (
           <Box
             key={index.name}
             sx={{
@@ -75,7 +122,7 @@ export function IndexTicker() {
                 color: index.positive ? '#10b981' : '#ef4444',
               }}
             >
-              {index.change}
+              {index.change > 0 ? `+${index.change}%` : `${index.change}%`}
             </Typography>
           </Box>
         ))}

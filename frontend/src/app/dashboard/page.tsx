@@ -25,12 +25,16 @@ interface User {
 }
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ id: number; email: string; balance: number } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const router = useRouter();
 
-  useEffect(() => { fetchUserProfile(); }, []);
+  useEffect(() => {
+    setIsClient(true);
+    fetchUserProfile();
+  }, []);
 
   useEffect(() => {
     const onBalanceUpdated = (event: Event) => {
@@ -81,7 +85,7 @@ export default function DashboardPage() {
   };
 
   // Prevent hydration mismatch by only showing loading on client-side
-  if (typeof window !== 'undefined' && loading) {
+  if (isClient && loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

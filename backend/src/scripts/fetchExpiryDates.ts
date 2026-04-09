@@ -50,7 +50,7 @@ export function fetchExpiryDates(): IndexExpiries[] {
     {
       index: 'SENSEX',
       expiries: [
-        '09-04-2026',
+
         '16-04-2026',
         '23-04-2026',
         '30-04-2026',

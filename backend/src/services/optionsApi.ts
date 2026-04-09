@@ -1,5 +1,6 @@
 import { addContractToWatch, removeContractFromWatch, getContractLTP, getMultipleContractLTPs } from './optionsSimulator';
 import { logger } from '../utils/logger';
+import { getCurrentMarketSession, isMarketOpen } from './indexPoller';
 
 /**
  * API service for options contract management
@@ -137,6 +138,47 @@ export class OptionsApiService {
 
     const stepSize = stepSizes[indexName] || 50;
     return Math.round(spotPrice / stepSize) * stepSize;
+  }
+
+  /**
+   * Get current market session information
+   */
+  static async getCurrentMarketSession() {
+    try {
+      
+      
+      const session = getCurrentMarketSession();
+      if (!session) {
+        return {
+          success: true,
+          market: null,
+          isMarketOpen: false,
+          message: 'No active market session'
+        };
+      }
+
+      // Check if the market is actually open (handles holidays)
+      const marketOpen = await isMarketOpen(session.url);
+      
+      return {
+        success: true,
+        market: {
+          name: session.name,
+          url: session.url,
+          isOpen: marketOpen
+        },
+        isMarketOpen: marketOpen,
+        message: marketOpen ? `Market ${session.name} is open` : `Market ${session.name} is closed (using fallback)`
+      };
+    } catch (error) {
+      logger.error('Error getting current market session:', error);
+      return {
+        success: false,
+        market: null,
+        isMarketOpen: false,
+        message: 'Failed to get market session'
+      };
+    }
   }
 }
 

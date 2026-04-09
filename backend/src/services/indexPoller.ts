@@ -61,34 +61,8 @@ export async function isMarketOpen(url: string): Promise<boolean> {
     }
 }
 
-export async function fetchOtherExchangeLiveData(): Promise<number | null> {
-    let YAHOO_FINANCE_URL = getYahooFinanceUrlByIST();
-    const marketState = await isMarketOpen(YAHOO_FINANCE_URL);
-    if (!marketState) {
-        YAHOO_FINANCE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD'; // Default to Bitcoin if not in regular market state
-    }
-
-    try {
-        const response = await fetch(YAHOO_FINANCE_URL);
-        const data = await response.json() as {
-            chart: {
-                result: Array<{
-                    meta: {
-                        regularMarketPrice: number;
-                        regularMarketTime: number;
-                    };
-                }>;
-            };
-        };
-        const result = data.chart.result[0];
-        return result.meta.regularMarketPrice;
-    } catch {
-        return null;
-    }
-}
-
 // Helper to check if current time is within market session
-function getCurrentMarketSession(): typeof MARKET_SESSIONS[0] | null {
+export function getCurrentMarketSession(): typeof MARKET_SESSIONS[0] | null {
   const now = new Date();
   const hours = now.getHours();
   const minutes = now.getMinutes();
@@ -129,15 +103,27 @@ async function fetchLiveData(url: string): Promise<number | null> {
 async function pollMarketChange(): Promise<number | null> {
   const session = getCurrentMarketSession();
   if (!session) return null;
-  // console.log(`\n🔍 Active Market: ${session.name} (${new Date().toLocaleTimeString()})`);
-  const currentPrice = await fetchLiveData(session.url);
+  
+  let url = session.url;
+  
+  // Check if the current market session is actually open (handles holidays)
+  const marketOpen = await isMarketOpen(url);
+  if (!marketOpen) {
+    // Fallback to Bitcoin if current market is closed due to holiday
+    url = 'https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD';
+    logger.info(`Market ${session.name} is closed (holiday), using Bitcoin as fallback`);
+  }
+  
+  // console.log(`\n\u001b[36m\u001b[1m\u001b[3m\u26a0\ufe0f Active Market: ${marketName} (${new Date().toLocaleTimeString()})\u001b[0m`);
+  const currentPrice = await fetchLiveData(url);
   let percentChange: number | null = null;
 
   if (previousPrice !== null && currentPrice !== null) {
     percentChange = ((currentPrice - previousPrice) / previousPrice) * 100;
     // Cap at 15% to avoid extreme changes
     if (Math.abs(percentChange) > 15) {
-      logger.warn(`Skipping invalid change: ${percentChange}%`);
+      logger.warn(`Skipping invalid change: ${percentChange}% - updating previous price to ${currentPrice}`);
+      previousPrice = currentPrice; // Update previous price to avoid repeated big changes
       return null;
     }
   }
@@ -198,10 +184,10 @@ export async function startSimulation() {
     const percentChange = await pollMarketChange();
     
     if (percentChange !== null) {
-        const oldNifty = simulatedPrices['NIFTY'];
-        const newNifty = oldNifty !== null ? oldNifty * (1 + percentChange / 100) : null;
+      //   const oldNifty = simulatedPrices['NIFTY'];
+      //   const newNifty = oldNifty !== null ? oldNifty * (1 + percentChange / 100) : null;
     
-       // console.log(`\n📈 MARKET CHANGE: ${percentChange.toFixed(4)}%`);
+      //  // console.log(`\n📈 MARKET CHANGE: ${percentChange.toFixed(4)}%`);
        // console.log(`   NIFTY: ${oldNifty?.toFixed(2)} → ${newNifty?.toFixed(2)}`);
         logger.debug(`Market change: ${percentChange.toFixed(4)}%`);
         applyPriceChange(percentChange);

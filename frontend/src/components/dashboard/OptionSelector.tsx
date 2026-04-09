@@ -228,31 +228,7 @@ export function OptionSelector() {
             </Select>
           </Box>
 
-          <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', mb: '2px',
-              textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              Strike
-            </Typography>
-            <Select
-              value={selectedStrikeOffset}
-              onChange={(e) => dispatch(setSelectedStrikeOffset(e.target.value as number))}
-              size="small"
-              fullWidth
-              sx={{
-                '& .MuiInputBase-input': { fontSize: '0.75rem', padding: '2px 6px' },
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': { borderColor: '#e5e7eb' },
-                  '&:hover fieldset': { borderColor: '#d1d5db' },
-                },
-              }}
-            >
-              {Array.from({ length: 21 }, (_, i) => i - 10).map((offset) => (
-                <MenuItem key={offset} value={offset} sx={{ fontSize: '0.75rem' }}>
-                  {offset === 0 ? 'ATM' : offset > 0 ? `+${offset}` : `${offset}`}
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
+          
         </Box>
 
 
@@ -288,11 +264,11 @@ export function OptionSelector() {
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', mb: '2px',
               textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              Type
+              Strike
             </Typography>
             <Select
-              value={optionType}
-              onChange={(e) => setOptionType(e.target.value as 'CE' | 'PE')}
+              value={selectedStrikeOffset}
+              onChange={(e) => dispatch(setSelectedStrikeOffset(e.target.value as number))}
               size="small"
               fullWidth
               sx={{
@@ -303,8 +279,11 @@ export function OptionSelector() {
                 },
               }}
             >
-              <MenuItem value="CE" sx={{ fontSize: '0.75rem', color: '#10b981' }}>Call</MenuItem>
-              <MenuItem value="PE" sx={{ fontSize: '0.75rem', color: '#ef4444' }}>Put</MenuItem>
+              {Array.from({ length: 21 }, (_, i) => i - 10).map((offset) => (
+                <MenuItem key={offset} value={offset} sx={{ fontSize: '0.75rem' }}>
+                  {offset === 0 ? 'ATM' : offset > 0 ? `+${offset}` : `${offset}`}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
         </Box>
@@ -312,26 +291,12 @@ export function OptionSelector() {
         {/* Add button */}
         <Box sx={{ mt: 'auto', pt: '4px' }}>
           <Button
-            variant="primary"
+            variant="secondary"
             fullWidth
             onClick={handleAddContract}
             disabled={loading || !atmStrike}
-            sx={{
-              background: optionType === 'CE'
-                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              py: '6px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              fontFamily: '"DM Sans", sans-serif',
-              '&:hover': {
-                background: optionType === 'CE'
-                  ? 'linear-gradient(135deg, #059669 0%, #047857 100%)'
-                  : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-              },
-            }}
           >
-            {loading ? 'Adding...' : `Add ${optionType}`}
+            {loading ? 'Adding...' : 'Add to Terminal'}
           </Button>
         </Box>
       </Box>

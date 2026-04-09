@@ -1,9 +1,59 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Box, Typography, Button } from '@mui/material';
+import { fetchMarketSession } from '@/api/marketSessionApi';
 
 export function HeroSection() {
+  const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
+  const [isTokenValid, setIsTokenValid] = useState<boolean>(false);
+  const [ marketSession, setMarketSession] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check for token and validate it
+    const storedToken = localStorage.getItem('token');
+    setToken(storedToken);
+    
+    if (storedToken) {
+      // Simple token validation - check if it's not expired
+      try {
+        const tokenData = JSON.parse(atob(storedToken.split('.')[1]));
+        const currentTime = Date.now() / 1000;
+        const isExpired = tokenData.exp < currentTime;
+        setIsTokenValid(!isExpired);
+      } catch (error) {
+        setIsTokenValid(false);
+      }
+    }
+
+    // Fetch market session
+    const fetchMarketData = async () => {
+      try {
+        const data = await fetchMarketSession();
+        if (data.success && data.market) {
+          setMarketSession(data.market.name);
+        }
+      } catch (error) {
+        console.error('Failed to fetch market session:', error);
+      }
+    };
+
+    fetchMarketData();
+    const interval = setInterval(fetchMarketData, 7200000); // Update every 2 hours
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSignInClick = () => {
+    if (token && isTokenValid) {
+      router.push('/dashboard');
+    } else {
+      router.push('/login');
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -49,7 +99,7 @@ export function HeroSection() {
             fontSize: '0.7rem',
           }}
         >
-          PAPER OPTIONS TRADING · 24×7
+          {marketSession ? `Polling from ${marketSession}` : 'PAPER OPTIONS TRADING - 24x7'}
         </Typography>
       </Box>
 
@@ -66,7 +116,7 @@ export function HeroSection() {
           mb: 3,
         }}
       >
-        Trade{' '}
+        Learn{' '}
         <Box
           component="span"
           sx={{
@@ -76,7 +126,7 @@ export function HeroSection() {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          smarter.
+          Trading.
         </Box>
         <br />
         Risk nothing.
@@ -95,8 +145,7 @@ export function HeroSection() {
           fontSize: { xs: '1rem', md: '1.125rem' },
         }}
       >
-        Master option trading across India's top indexes — 
-        no capital at risk, ever.
+        Master option trading across India's top indexes - anytime, anywhere, whole day!
       </Typography>
 
       {/* CTA Buttons */}
@@ -137,8 +186,7 @@ export function HeroSection() {
         </Button>
 
         <Button
-          component={Link}
-          href="/login"
+          onClick={handleSignInClick}
           size="large"
           sx={{
             px: 5,
@@ -163,47 +211,6 @@ export function HeroSection() {
         </Button>
       </Box>
 
-      {/* Stat strip */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          gap: { xs: 4, sm: 8 },
-          flexWrap: 'wrap',
-        }}
-      >
-        {[
-          { value: '6', label: 'Indexes supported' },
-          { value: '24×7', label: 'Market access' },
-          { value: '₹0', label: 'Capital required' },
-        ].map((stat) => (
-          <Box key={stat.label} sx={{ textAlign: 'center' }}>
-            <Typography
-              sx={{
-                fontFamily: '"Playfair Display", serif',
-                fontSize: '1.9rem',
-                fontWeight: 700,
-                color: '#0a0a0a',
-                lineHeight: 1,
-              }}
-            >
-              {stat.value}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                fontFamily: '"DM Sans", sans-serif',
-                color: '#9ca3af',
-                fontSize: '0.72rem',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {stat.label}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
     </Box>
   );
 }

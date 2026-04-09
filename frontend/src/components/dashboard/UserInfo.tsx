@@ -121,7 +121,9 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
                 style={{
                   height: '40px',
                   width: 'auto',
+                  cursor: 'pointer',
                 }}
+                onClick={() => router.push('/')}
               />
             </Box>
             <p

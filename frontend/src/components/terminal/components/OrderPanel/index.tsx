@@ -193,8 +193,32 @@ const OrderPanel: React.FC = () => {
           color: '#92400e',
           fontSize: '10px',
           fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}>
-          {warning}
+          <Box>{warning}</Box>
+          <Box
+            onClick={() => setWarning(null)}
+            sx={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '2px',
+              bgcolor: '#ef4444',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '10px',
+              fontWeight: 'bold',
+              '&:hover': {
+                bgcolor: '#dc2626',
+              },
+            }}
+          >
+            ×
+          </Box>
         </Box>
       )}
     </Box>

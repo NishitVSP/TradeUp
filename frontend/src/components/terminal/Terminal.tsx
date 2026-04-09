@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/joy';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
 import { closeAllPositions, cancelAllOrders } from '@/store/slices/terminalSlice';
 import { useLtpPoller } from '@/hooks/useLtpPoller';
 import { useLimitOrderMonitor } from '@/hooks/useLimitOrderMonitor';
+import { fetchMarketSession } from '@/api/marketSessionApi';
 
 import IndexSelection       from './components/IndexSelection';
 import ExpiryAndQuantityRow from './components/ExpiryAndQuantityRow';
@@ -22,12 +23,31 @@ export function Terminal() {
   const { activeIndexName, activeExpiry, selectedContracts } = useSelector(
     (s: RootState) => s.terminal
   );
+  const [marketSession, setMarketSession] = useState<string | null>(null);
 
   // ── Start tiered LTP polling for all watched contracts ──────────────────────
   useLtpPoller();
 
   // Monitor and execute limit orders when price crosses limit
   useLimitOrderMonitor();
+
+  // Fetch current market session
+  useEffect(() => {
+    const fetchMarketData = async () => {
+      try {
+        const data = await fetchMarketSession();
+        if (data.success && data.market) {
+          setMarketSession(data.market.name);
+        }
+      } catch (error) {
+        console.error('Failed to fetch market session:', error);
+      }
+    };
+
+    fetchMarketData();
+    const interval = setInterval(fetchMarketData, 7200000); // Update every 2 hours (2 * 60 * 60 * 1000)
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Global keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {
@@ -79,6 +99,24 @@ export function Terminal() {
           <Typography sx={{ fontSize: '9px', color: '#9ca3af', fontWeight: 600 }}>
             {selectedContracts.length > 0 ? 'LIVE' : 'IDLE'}
           </Typography>
+          {marketSession && (
+            <Box sx={{ 
+              fontSize: '9px', 
+              fontWeight: 600, 
+              color: '#10b981',
+              bgcolor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '4px', 
+              px: '6px', 
+              py: '1px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px'
+            }}>
+              <Box sx={{  justifyContent: 'center', alignItems: 'center' }} />
+              POLLING {marketSession}
+            </Box>
+          )}
         </Box>
       </Box>
 
