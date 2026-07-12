@@ -1,60 +1,60 @@
 interface IndexExpiries {
   index: string;
-  expiries: string[]; // 5 expiry dates in DD-MM-YYYY format
+  expiries: string[];
 }
 
 export function fetchExpiryDates(): IndexExpiries[] {
   return [
     {
-      index: 'NIFTY',
-      expiries: [ 
-        '13-04-2026',
-        '21-04-2026',
-        '28-04-2026',
-        '05-05-2026',
-        '26-05-2026'
+      index: "NIFTY",
+      expiries: [
+        "14-07-2026",
+        "21-07-2026",
+        "28-07-2026",
+        "04-08-2026",
+        "11-08-2026"
       ]
     },
     {
-      index: 'BANKNIFTY',
+      index: "BANKNIFTY",
       expiries: [
-        '28-04-2026',
-        '26-05-2026',
-        '30-06-2026'
+        "28-07-2026",
+        "25-08-2026",
+        "29-09-2026"
       ]
     },
     {
-      index: 'FINNIFTY',
+      index: "FINNIFTY",
       expiries: [
-        '28-04-2026',
-        '26-05-2026',
-        '30-06-2026'
+        "28-07-2026",
+        "25-08-2026",
+        "29-09-2026"
       ]
     },
     {
-      index: 'MIDCPNIFTY',
+      index: "MIDCPNIFTY",
       expiries: [
-        '28-04-2026',
-        '26-05-2026',
-        '30-06-2026'
+        "28-07-2026",
+        "25-08-2026",
+        "29-09-2026"
       ]
     },
     {
-      index: 'BANKEX',
+      index: "BANKEX",
       expiries: [
-        '30-04-2026',
-        '27-05-2026',
-        '25-06-2026'
+        "30-07-2026",
+        "27-08-2026",
+        "24-09-2026"
       ]
     },
     {
-      index: 'SENSEX',
+      index: "SENSEX",
       expiries: [
-
-        '16-04-2026',
-        '23-04-2026',
-        '30-04-2026',
-        '07-05-2026'
+        "16-07-2026",
+        "23-07-2026",
+        "30-07-2026",
+        "06-08-2026",
+        "13-08-2026"
       ]
     }
   ];

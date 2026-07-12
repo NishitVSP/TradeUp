@@ -89,7 +89,10 @@ function makeKey(c: { indexName: string; strikePrice: number; expiryDate: string
 }
 
 function getTier(indexName: string, strikePrice: number, spot: number): Tier {
-  const step = STEP[indexName] ?? 50;
+  // Return cold tier for invalid indices
+  if (!STEP[indexName]) return 'cold';
+  
+  const step = STEP[indexName];
   const dist = Math.abs(strikePrice - Math.round(spot / step) * step) / step;
   if (dist <= 5)  return 'hot';
   if (dist <= 10) return 'warm';

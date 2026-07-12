@@ -15,6 +15,7 @@ import {
   BalanceAmount,
 } from './styled';
 import { Button } from '../ui';
+import { AssistantWidget } from '../assistant';
 
 interface User {
   user_id?: number;
@@ -112,33 +113,33 @@ export function UserInfo({ user, onBalanceUpdate }: UserInfoProps) {
   return (
     <>
       <Panel>
-        <PanelHeader>
-          <Box sx={{ mb: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-              <img
-                src="/tradeupLogo_brand.svg"
-                alt="TradeUp Logo"
-                style={{
-                  height: '40px',
-                  width: 'auto',
-                  cursor: 'pointer',
-                }}
-                onClick={() => router.push('/')}
-              />
-            </Box>
+        <PanelHeader sx={{ alignItems: 'center', justifyContent: 'space-around' }}>
+          <Box>
+            <img
+              src="/tradeupLogo_brand.svg"
+              alt="TradeUp Logo"
+              style={{
+                height: '40px',
+                width: 'auto',
+                cursor: 'pointer',
+                display: 'block',
+              }}
+              onClick={() => router.push('/')}
+            />
             <p
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: '0.95rem',
-              color: '#64748b',
-              margin: '4px 0 0 0',
-            }}
-          >
-            Welcome back, {userName}
-          </p>
-        </Box>
-        
-      </PanelHeader>
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: '0.95rem',
+                color: '#64748b',
+                margin: '4px 0 0 0',
+              }}
+            >
+              Welcome back, {userName}
+            </p>
+          </Box>
+
+          <AssistantWidget />
+        </PanelHeader>
 
         <BalanceCard>
           <InfoLabel sx={{ color: 'rgba(255, 255, 255, 0.9)' }}>

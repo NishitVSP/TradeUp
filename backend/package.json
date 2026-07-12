@@ -6,6 +6,7 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node --watch src/index.ts",
+    "populate-contracts": "ts-node src/scripts/populateOptionsContracts.ts",
     "build": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -15,7 +16,9 @@
     "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "groq-sdk": "^1.3.0",
     "jsonwebtoken": "^9.0.3",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",

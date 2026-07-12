@@ -163,8 +163,7 @@ describe('OptionsSimulator - White Box Testing', () => {
         strikePrice: 19500,
         expiryDate: '2024-01-25',
         optionType: 'CE',
-        interval: 500,
-        lastUpdate: 0,
+        tier: 'hot',
       });
 
       removeContractFromWatch('NIFTY', 19500, '2024-01-25', 'CE');
@@ -194,17 +193,15 @@ describe('OptionsSimulator - White Box Testing', () => {
         strikePrice: 19500,
         expiryDate: '2024-01-25',
         optionType: 'CE',
-        interval: 500,
-        lastUpdate: 0,
-      } as any);
+        tier: 'hot',
+      });
       watchedContracts.set('NIFTY-19600-2024-01-25-PE', {
         indexName: 'NIFTY',
         strikePrice: 19600,
         expiryDate: '2024-01-25',
         optionType: 'PE',
-        interval: 500,
-        lastUpdate: 0,
-      } as any);
+        tier: 'hot',
+      });
 
       const contracts = getWatchedContracts();
       expect(contracts).toHaveLength(2);

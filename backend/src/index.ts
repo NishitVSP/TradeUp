@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { startSimulation, stopSimulation as stopIndexSimulation } from './services/indexPoller';
 import { populateOptionsContracts } from './scripts/populateOptionsContracts';
 import { initializeOptionsSimulator, stopSimulation as stopOptionsSimulation } from './services/optionsSimulator';

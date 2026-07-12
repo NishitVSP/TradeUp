@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import { logger } from './utils/logger';
-import authRoutes    from './routes/auth';
-import optionsRoutes from './routes/options';
-import ordersRoutes  from './routes/orders';
+import authRoutes      from './routes/auth';
+import optionsRoutes   from './routes/options';
+import ordersRoutes    from './routes/orders';
+import assistantRoutes from './routes/assistant';
 
 const app  = express();
 const PORT = 3001;
@@ -22,9 +23,10 @@ app.use((req, _res, next) => {
   next();
 });
 
-app.use('/api/auth',    authRoutes);
-app.use('/api/options', optionsRoutes);
-app.use('/api/orders',  ordersRoutes);
+app.use('/api/auth',      authRoutes);
+app.use('/api/options',   optionsRoutes);
+app.use('/api/orders',    ordersRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ success: true, message: 'TradeUp backend running', timestamp: new Date().toISOString() });
