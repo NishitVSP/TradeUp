@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
 import { sendAssistantMessage, confirmAssistantOrder } from '@/api/assistantApi';
+import { addExternalPosition } from './terminalSlice';
 import type { ChatMessage, OrderProposal, OrderProposalStatus } from '@/types/assistant';
 
 interface AssistantState {
@@ -137,6 +138,33 @@ export const confirmOrder = createAsyncThunk<
     const balanceAfter = result.data?.balanceAfter;
     if (typeof balanceAfter === 'number' && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tradeup:balance-updated', { detail: { balance: balanceAfter } }));
+    }
+
+    // Mirror the executed trade into terminal.positions — the ONLY state
+    // <Positions /> renders from. orderService.executeOrder() (confirmed via
+    // orderService.ts) returns executionPrice/quantity/status for MKT orders;
+    // LMT orders come back with status 'PENDING' and no executionPrice since
+    // they haven't filled yet — so we only add a position once it's actually
+    // EXECUTED. proposal.lotSize/lots are used as-is (not re-derived from a
+    // frontend lot-size table) since they're exactly what orderService used
+    // server-side to compute quantity and debit the balance.
+    if (result.data?.status === 'EXECUTED' && typeof result.data?.executionPrice === 'number') {
+      const quantity =
+        typeof result.data.quantity === 'number' ? result.data.quantity : proposal.lots * proposal.lotSize;
+
+      dispatch(
+        addExternalPosition({
+          indexName: proposal.indexName,
+          strikePrice: proposal.strikePrice,
+          expiryDate: proposal.expiryDate,
+          optionType: proposal.optionType,
+          side: proposal.action,
+          lots: proposal.lots,
+          quantity,
+          lotSize: proposal.lotSize,
+          executedPrice: result.data.executionPrice,
+        })
+      );
     }
   } else {
     dispatch(setOrderStatus({ id: messageId, status: 'failed' }));

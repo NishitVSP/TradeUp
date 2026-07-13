@@ -12,7 +12,7 @@
 
 import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
-import { getContractLTP } from './optionsSimulator';
+import { getContractLTP, addContractToWatch } from './optionsSimulator';
 import { logger } from '../utils/logger';
 
 const DB_PATH = './data/tradeup.db';
@@ -65,6 +65,19 @@ export async function executeOrder(userId: number, input: OrderInput): Promise<O
       return { success: false, message: `Contract not found: ${indexName} ${strikePrice} ${optionType} (${expiryDate}). Make sure it's being watched first.` };
     }
 
+    // The worker-based LTP simulator only generates live prices for contracts
+    // explicitly registered via addContractToWatch — normally triggered by
+    // the frontend (OptionSelector's "Add to Terminal" flow) before a manual
+    // order is placed. The AI assistant goes straight from chat -> confirm ->
+    // execute and never calls that watch step, so without this, an
+    // assistant-originated trade's contract would have no live worker
+    // running: its price stays frozen at whatever was seeded when
+    // populateOptionsContracts last ran, and stays frozen afterwards too
+    // (no ongoing simulation → stale P&L in the Positions panel). Calling
+    // this here guarantees simulation starts regardless of which flow placed
+    // the order. It's a no-op (returns immediately) if already watched.
+    await addContractToWatch(indexName, Number(strikePrice), expiryDate, optionType);
+
     // Limit order → stays PENDING
     if (orderType === 'LMT' && limitPrice) {
       const now = new Date().toISOString();
@@ -85,7 +98,7 @@ export async function executeOrder(userId: number, input: OrderInput): Promise<O
     const executionPrice = liveLtp ?? contract.ltp ?? 0;
 
     if (!executionPrice || executionPrice <= 0) {
-      return { success: false, message: 'LTP not available yet. Try again shortly.' };
+      return { success: false, message: 'LTP not available yet. Please add the option, select from the option selection panel below position.' };
     }
 
     if (action === 'BUY') {

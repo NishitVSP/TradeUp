@@ -82,7 +82,7 @@ export async function placeOrder(req: Request, res: Response): Promise<void> {
     const executionPrice = liveLtp ?? contract.ltp ?? 0;
 
     if (!executionPrice || executionPrice <= 0) {
-      res.status(400).json({ success: false, message: 'LTP not available yet. Try again shortly.' });
+      res.status(400).json({ success: false, message: 'LTP not available yet. Please add the option, select from the option selection panel below position' });
       return;
     }
 

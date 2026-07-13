@@ -29,11 +29,27 @@ import { logger } from '../utils/logger';
 
 const MODEL = 'llama-3.1-8b-instant'; // cheapest Groq model with solid tool-calling support
 
+/**
+ * llama-3.1-8b-instant occasionally emits a malformed or schema-invalid tool
+ * call (e.g. `limitPrice: null`, or a truncated `<function=...>` block) —
+ * Groq rejects these with a 400 before we ever see a real reply. These are
+ * usually transient: retrying the exact same request once tends to succeed
+ * (observed in practice — the very next identical user message succeeded).
+ * Rather than surfacing "assistant is temporarily unavailable" for what's
+ * often just a one-off flaky generation, retry once before giving up.
+ */
+function isToolCallFailure(err: any): boolean {
+  const code = err?.error?.error?.code ?? err?.error?.code;
+  const message: string = err?.error?.error?.message ?? err?.error?.message ?? err?.message ?? '';
+  return err?.status === 400 && (code === 'tool_use_failed' || /tool call validation failed|Failed to call a function/i.test(message));
+}
+
 export interface AssistantContext {
   spotPrices: Record<string, number | null>;
   atmStrikes: Record<string, number | null>;
   availableExpiries: Record<string, string[]>;
   balance: number;
+  lotSizes: Record<string, number>;
 }
 
 export interface AssistantReply {
@@ -71,8 +87,13 @@ const PLACE_ORDER_TOOL = {
         action: { type: 'string', enum: ['BUY', 'SELL'] },
         orderType: { type: 'string', enum: ['MKT', 'LMT'] },
         lots: { type: 'number' },
-        lotSize: { type: 'number', description: 'Default to 25 if the user does not specify and index is NIFTY-like; ask if genuinely ambiguous.' },
-        limitPrice: { type: 'number', description: 'Only required if orderType is LMT.' },
+        lotSize: { type: 'number', description: 'Must exactly equal lotSizes[indexName] from the market context given to you — never guess or default this value.' },
+        limitPrice: {
+          type: ['number', 'null'],
+          description:
+            'Required only when orderType is "LMT". For "MKT" orders, omit this field entirely from your ' +
+            'function call — do not include it and set it to null; that fails validation.',
+        },
         summary: { type: 'string', description: 'One sentence, human-readable summary of this order for the user to confirm.' },
       },
       required: ['indexName', 'strikePrice', 'expiryDate', 'optionType', 'action', 'orderType', 'lots', 'lotSize', 'summary'],
@@ -101,6 +122,7 @@ ${docsBlock}
 Rules:
 - If the user asks a concept/how-it-works question, just answer in plain text. Do not call any tool.
 - If the user gives a trade instruction, resolve strike/expiry using the context above, then call propose_order.
+- lotSize must always be taken from context.lotSizes[indexName] exactly — it is a fixed exchange-defined value, never something to guess or default.
 - If a trade instruction is ambiguous (e.g. no expiry, no lot count), ask ONE clarifying question in text instead of guessing.
 - Never claim a trade has executed — only the confirm step executes it.
 - Keep tone concise and professional, like a trading terminal assistant, not a chatty generic assistant.`;
@@ -127,6 +149,19 @@ export async function chatWithAssistant(
       tool_choice: 'auto',
       max_completion_tokens: 512,
       temperature: 0.3, // keep it fairly deterministic — this is a trading tool, not a creative one
+    }).catch(async (err) => {
+      if (isToolCallFailure(err)) {
+        logger.warn('Groq tool call failed validation, retrying once:', err?.message ?? err);
+        return createChatCompletion({
+          model: MODEL,
+          messages: messages as any,
+          tools: [PLACE_ORDER_TOOL],
+          tool_choice: 'auto',
+          max_completion_tokens: 512,
+          temperature: 0.3,
+        });
+      }
+      throw err;
     });
 
     const choice = response.choices[0];
@@ -153,7 +188,7 @@ export async function chatWithAssistant(
           orderType: input.orderType,
           lots: input.lots,
           lotSize: input.lotSize,
-          limitPrice: input.limitPrice,
+          limitPrice: input.limitPrice ?? undefined,
           summary: input.summary,
         },
       };

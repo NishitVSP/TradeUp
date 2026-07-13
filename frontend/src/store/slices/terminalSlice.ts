@@ -187,6 +187,64 @@ function appendUnique<T>(arr: T[], val: T): T[] {
   return arr.includes(val) ? arr : [...arr, val];
 }
 
+// Shared by executeOrderLocally (manual trades) and addExternalPosition
+// (assistant-confirmed trades) so both paths build/merge Position rows
+// identically.
+function upsertPosition(
+  positions: Position[],
+  order: {
+    indexName: string;
+    strikePrice: number;
+    expiryDate: string;
+    optionType: 'CE' | 'PE';
+    side: 'BUY' | 'SELL';
+    lots: number;
+    quantity: number;
+    lotSize: number;
+    executedPrice: number;
+    targetPts?: number | null;
+    slPts?: number | null;
+    trailPts?: number | null;
+  }
+) {
+  const posKey = `${order.indexName}-${order.strikePrice}-${order.expiryDate}-${order.optionType}`;
+  const existing = positions.find(
+    (p) => p.status === 'OPEN' &&
+           `${p.indexName}-${p.strikePrice}-${p.expiryDate}-${p.optionType}` === posKey &&
+           p.side === order.side
+  );
+
+  if (existing) {
+    const totalQty = existing.quantity + order.quantity;
+    existing.entryPrice =
+      (existing.entryPrice * existing.quantity + order.executedPrice * order.quantity) / totalQty;
+    existing.lots     += order.lots;
+    existing.quantity  = totalQty;
+  } else {
+    positions.unshift({
+      id:          `pos-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      indexName:   order.indexName,
+      strikePrice: order.strikePrice,
+      expiryDate:  order.expiryDate,
+      optionType:  order.optionType,
+      side:        order.side,
+      lots:        order.lots,
+      quantity:    order.quantity,
+      lotSize:     order.lotSize,
+      entryPrice:  order.executedPrice,
+      currentLtp:  order.executedPrice,
+      pnl:         0,
+      openedAt:    new Date().toISOString(),
+      targetPts:   order.targetPts ?? null,
+      slPts:       order.slPts ?? null,
+      trailPts:    order.trailPts ?? null,
+      mtmTrailPts: null,
+      highestPnl:  null,
+      status:      'OPEN',
+    });
+  }
+}
+
 // ─── Slice ────────────────────────────────────────────────────────────────────
 
 const terminalSlice = createSlice({
@@ -422,42 +480,46 @@ const terminalSlice = createSlice({
       order.executedPrice = action.payload.executedPrice;
       order.executedAt = new Date().toISOString();
 
-      const posKey = `${order.indexName}-${order.strikePrice}-${order.expiryDate}-${order.optionType}`;
-      const existing = state.positions.find(
-        (p) => p.status === 'OPEN' &&
-               `${p.indexName}-${p.strikePrice}-${p.expiryDate}-${p.optionType}` === posKey &&
-               p.side === order.transactionType
-      );
+      upsertPosition(state.positions, {
+        indexName:     order.indexName,
+        strikePrice:   order.strikePrice,
+        expiryDate:    order.expiryDate,
+        optionType:    order.optionType,
+        side:          order.transactionType,
+        lots:          order.lots,
+        quantity:      order.quantity,
+        lotSize:       order.lotSize,
+        executedPrice: action.payload.executedPrice,
+        targetPts:     order.targetPts,
+        slPts:         order.slPts,
+        trailPts:      order.trailPts,
+      });
+    },
 
-      if (existing) {
-        const totalQty = existing.quantity + order.quantity;
-        existing.entryPrice =
-          (existing.entryPrice * existing.quantity + action.payload.executedPrice * order.quantity) / totalQty;
-        existing.lots     += order.lots;
-        existing.quantity  = totalQty;
-      } else {
-        state.positions.unshift({
-          id:          `pos-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          indexName:   order.indexName,
-          strikePrice: order.strikePrice,
-          expiryDate:  order.expiryDate,
-          optionType:  order.optionType,
-          side:        order.transactionType,
-          lots:        order.lots,
-          quantity:    order.quantity,
-          lotSize:     order.lotSize,
-          entryPrice:  action.payload.executedPrice,
-          currentLtp:  action.payload.executedPrice,
-          pnl:         0,
-          openedAt:    new Date().toISOString(),
-          targetPts:   order.targetPts,
-          slPts:       order.slPts,
-          trailPts:    order.trailPts,
-          mtmTrailPts: null,
-          highestPnl:  null,
-          status:      'OPEN',
-        });
-      }
+    // ── Called after the AI assistant's order is confirmed & executed on the
+    // backend (assistantSlice.confirmOrder). The assistant flow never runs
+    // placeOrder/executeOrderLocally — it hits /api/assistant/confirm-order
+    // directly — so without this, a trade could succeed on the backend
+    // (balance debited, DB position row inserted) while never appearing here
+    // in terminal.positions, which is the only thing <Positions /> renders.
+    addExternalPosition: (
+      state,
+      action: PayloadAction<{
+        indexName: string;
+        strikePrice: number;
+        expiryDate: string;
+        optionType: 'CE' | 'PE';
+        side: 'BUY' | 'SELL';
+        lots: number;
+        quantity: number;
+        lotSize: number;
+        executedPrice: number;
+        targetPts?: number | null;
+        slPts?: number | null;
+        trailPts?: number | null;
+      }>
+    ) => {
+      upsertPosition(state.positions, action.payload);
     },
 
     updateOrderStatus: (
@@ -536,7 +598,7 @@ export const {
   setGlobalMtmTarget, setGlobalMtmSL,
   setLimitOnLtp, setSlLimitProtection,
   setActiveTab,
-  placeOrder, executeOrderLocally, updateOrderStatus, updateOrderLimitPrice,
+  placeOrder, executeOrderLocally, addExternalPosition, updateOrderStatus, updateOrderLimitPrice,
   updatePositionRiskParams,
   cancelOrder, closePosition, closeAllPositions, cancelAllOrders,
   setLoading, setError,

@@ -16,7 +16,7 @@ interface OrderProposalCardProps {
 const STATUS_LABEL: Record<Exclude<OrderProposalStatus, 'pending'>, string> = {
   confirmed: 'Placing order…',
   cancelled: 'Cancelled',
-  failed: 'Failed — see message above',
+  failed: 'Failed — see message below',
 };
 
 const STATUS_COLOR: Record<Exclude<OrderProposalStatus, 'pending'>, string> = {
