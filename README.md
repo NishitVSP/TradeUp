@@ -1,8 +1,7 @@
 # TradeUp - Options Trading Platform
 
-**Group ID**: 29  
-**Name**: Nishit Prajapati  
-**Roll Number**: 202351106  
+**Creator**: Nishit Prajapati  
+
 
 A comprehensive options trading platform built with React, Node.js, and SQLite, featuring real-time price tracking, limit order management, and advanced position risk controls.
 
